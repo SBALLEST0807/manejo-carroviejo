@@ -89,6 +89,33 @@ dialog form{display:flex;flex-direction:column;max-height:calc(100dvh - 34px)}
 @media (max-width:480px){.db{grid-template-columns:1fr}}
 .df{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .df .left{margin-right:auto}
+td.chk,th.chk{width:34px;padding-right:0}
+td.chk input{width:18px;height:18px;accent-color:var(--ink)}
+.selbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--ink);color:var(--bg);border-radius:8px;padding:10px 14px;margin-bottom:12px}
+.selbar button{background:var(--plate);color:var(--plate-ink);border-color:var(--plate)}
+.selbar .link{color:var(--bg);background:none;border:0}
+.factno{font-family:var(--font-mono);font-size:12px;font-weight:700}
+dialog.wide{width:min(860px,calc(100vw - 32px))}
+.ib{padding:16px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
+.igrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.paper{background:#ffffff;color:#16181b;border:1px solid var(--line);border-radius:6px;padding:28px;overflow-x:auto}
+.inv{font-family:var(--font-body);font-size:13px;line-height:1.4;color:#16181b;min-width:560px}
+.inv .ih{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid #16181b;padding-bottom:14px}
+.inv .emp{font-family:var(--font-display);font-size:24px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;line-height:1.05}
+.inv .doc{text-align:right}
+.inv .doc b{display:block;font-family:var(--font-display);font-size:18px;text-transform:uppercase;letter-spacing:.05em}
+.inv .doc .no{font-family:var(--font-mono);font-size:20px;font-weight:700;background:#f2c400;border:2px solid #111;border-radius:4px;padding:0 8px;display:inline-block;margin:4px 0}
+.inv .cli{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;padding:14px 0;border-bottom:1px solid #c9ccd1}
+.inv .lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5d6570}
+.inv table{min-width:0;margin-top:14px}
+.inv th{background:#eef0f2;color:#5d6570}
+.inv th,.inv td{border-bottom:1px solid #d5d9de;padding:7px 8px}
+.inv .tot td{border-bottom:0;font-weight:700;font-size:15px}
+.inv .let{margin-top:10px;padding:10px 12px;background:#eef0f2;border-radius:4px}
+.inv .pie{margin-top:28px;display:flex;justify-content:space-between;gap:24px;align-items:end}
+.inv .firma{border-top:1px solid #16181b;padding-top:6px;min-width:220px;text-align:center}
+#printArea{display:none}
+@media print{body>*:not(#printArea){display:none!important}#printArea{display:block}#printArea .inv{min-width:0}:root{padding:0}body{background:#fff}}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:6px;font-weight:600;z-index:20;max-width:calc(100vw - 32px)}
 @media (prefers-reduced-motion:no-preference){.toast{animation:up .2s ease-out}@keyframes up{from{transform:translate(-50%,8px);opacity:.4}}}
 </style>
@@ -96,11 +123,17 @@ dialog form{display:flex;flex-direction:column;max-height:calc(100dvh - 34px)}
 <header><div class="wrap">
   <div class="top"><div class="brand"><i aria-hidden="true"></i>Transporte Carro Viejo</div><div class="mode" id="mode">Cargando datos…</div></div>
   <nav id="nav">
-    <a href="#resumen">Resumen</a><a href="#viajes">Viajes</a><a href="#vehiculos">Vehículos</a><a href="#conductores">Conductores</a><a href="#gastos">Gastos</a>
+    <a href="#resumen">Resumen</a><a href="#viajes">Viajes</a><a href="#vehiculos">Vehículos</a><a href="#conductores">Conductores</a><a href="#gastos">Gastos</a><a href="#facturas">Facturas</a>
   </nav>
 </div></header>
 <main class="wrap" id="main"></main>
 
+<div id="printArea"></div>
+<dialog id="inv" class="wide"><form id="invFrm" novalidate>
+  <div class="dh"><h2 id="invTitle" style="margin:0">Facturar</h2></div>
+  <div class="ib" id="invBody"></div>
+  <div class="df" id="invFoot"></div>
+</form></dialog>
 <dialog id="dlg"><form id="frm" novalidate>
   <div class="dh"><h2 id="dlgTitle" style="margin:0">Nuevo</h2></div>
   <div class="db" id="dlgBody"></div>
@@ -108,8 +141,8 @@ dialog form{display:flex;flex-direction:column;max-height:calc(100dvh - 34px)}
 </form></dialog>
 
 <script>
-const COLS=['vehiculos','conductores','viajes','gastos'];
-const S={vehiculos:[],conductores:[],viajes:[],gastos:[]};
+const COLS=['vehiculos','conductores','viajes','gastos','facturas','config'];
+const S={vehiculos:[],conductores:[],viajes:[],gastos:[],facturas:[],config:[]};
 const loaded={};
 let mode='loading', db=null;
 const $=s=>document.querySelector(s);
@@ -124,12 +157,18 @@ const days=d=>d?Math.round((new Date(d+'T00:00:00')-new Date(TODAY+'T00:00:00'))
 const fdate=d=>d?new Date(d+'T00:00:00').toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}):'—';
 const num=v=>Number(v)||0;
 const uid=()=>(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2));
-const ui={viajesMes:THIS_MONTH,gastosMes:THIS_MONTH,resumenMes:THIS_MONTH,viajesVeh:'',gastosVeh:''};
+const ui={sel:new Set(),viajesMes:THIS_MONTH,gastosMes:THIS_MONTH,resumenMes:THIS_MONTH,viajesVeh:'',gastosVeh:''};
 
 /* ---------- Esquemas de formularios ---------- */
 const vehOpts=()=>S.vehiculos.map(v=>[v.id,v.placa+(v.marca?' · '+v.marca+' '+(v.modelo||''):'')]);
 const condOpts=()=>S.conductores.map(c=>[c.id,c.nombre]);
 const SCHEMA={
+  config:{one:'datos de la empresa',fields:[
+    {k:'nombre',l:'Nombre o razón social',req:1,full:1,def:()=>'Transporte Carro Viejo'},{k:'nit',l:'NIT o cédula'},{k:'telefono',l:'Celular'},
+    {k:'direccion',l:'Dirección'},{k:'ciudad',l:'Ciudad',ph:'Caucasia, Antioquia'},{k:'correo',l:'Correo'},
+    {k:'tipoDoc',l:'Tipo de documento',t:'select',o:['Cuenta de cobro','Factura de venta']},{k:'prefijo',l:'Prefijo del número',ph:'CC-'},
+    {k:'inicio',l:'Primer número',t:'number',def:()=>1},{k:'pago',l:'Cuenta para pagos',ph:'Bancolombia ahorros 000-000000-00',full:1},
+    {k:'pie',l:'Texto al pie',t:'textarea',full:1,ph:'No responsable de IVA.'}]},
   vehiculos:{one:'vehículo',fields:[
     {k:'placa',l:'Placa',req:1,ph:'ABC123'},{k:'ciudad',l:'Ciudad de matrícula',ph:'Medellín'},
     {k:'marca',l:'Marca',ph:'Renault'},{k:'modelo',l:'Línea / modelo',ph:'Duster'},
@@ -177,7 +216,7 @@ async function save(c,id,data){
   if(mode==='db'){
     if(id) await db.collection(c).doc(id).set(data); else await db.collection(c).add(data);
   }else{
-    if(id){const i=S[c].findIndex(x=>x.id===id);S[c][i]={...data,id}}else S[c].push({...data,id:uid()});
+    if(id){const i=S[c].findIndex(x=>x.id===id);if(i<0)S[c].push({...data,id});else S[c][i]={...data,id}}else S[c].push({...data,id:uid()});
     lsSet(c);render();
   }
 }
@@ -235,11 +274,13 @@ function vResumen(){
 function vViajes(){
   const rows=S.viajes.filter(x=>(!ui.viajesMes||(x.fecha||'').startsWith(ui.viajesMes))&&(!ui.viajesVeh||x.vehiculo===ui.viajesVeh)).sort((a,b)=>a.fecha<b.fecha?1:-1);
   const tot=rows.filter(x=>x.estado!=='Cancelado').reduce((a,x)=>a+num(x.valor),0);
-  return`<div class="bar"><div class="grow"><h1>Viajes</h1><p class="sub">${rows.length} viajes · ${cop.format(tot)} cobrados</p></div>
+  const nsel=[...ui.sel].filter(id=>S.viajes.some(v=>v.id===id&&!factOf(v))).length;
+  return`<div class="bar"><div class="grow"><h1>Viajes</h1><p class="sub">${rows.length} viajes · ${cop.format(tot)} cobrados · marca viajes para facturarlos</p></div>
   <div class="filters"><label>Mes<input type="month" id="fViaMes" value="${ui.viajesMes}"></label>${vehSelect('fViaVeh',ui.viajesVeh)}</div>
   <button class="primary" data-new="viajes">+ Nuevo viaje</button></div>
-  <div class="tbl"><table><thead><tr><th>Fecha</th><th>Vehículo</th><th>Conductor</th><th>Ruta</th><th>Cliente</th><th class="num">Km</th><th class="num">Valor</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${rows.length?rows.map(x=>`<tr><td>${fdate(x.fecha)}</td><td>${placa(veh(x.vehiculo))}</td><td>${esc(cond(x.conductor)?.nombre||'—')}</td><td>${esc(x.origen)} → ${esc(x.destino)}</td><td>${esc(x.cliente||'—')}</td><td class="num">${x.km?nf.format(x.km):'—'}</td><td class="num">${x.valor?cop.format(x.valor):'—'}</td><td>${pill(x.estado)}</td><td class="act"><button class="link" data-edit="viajes" data-id="${x.id}">Editar</button></td></tr>`).join(''):emptyRow(9,'Sin viajes en este periodo','Usa “Nuevo viaje” para registrar el primero.')}
+  ${nsel?`<div class="selbar"><b>${nsel} viaje${nsel>1?'s':''} seleccionado${nsel>1?'s':''}</b><span class="grow"></span><button class="link" data-clearsel="1">Quitar selección</button><button data-facturar="1">Facturar</button></div>`:''}
+  <div class="tbl"><table><thead><tr><th class="chk"></th><th>Fecha</th><th>Vehículo</th><th>Conductor</th><th>Ruta</th><th>Cliente</th><th class="num">Km</th><th class="num">Valor</th><th>Estado</th><th>Factura</th><th></th></tr></thead><tbody>
+  ${rows.length?rows.map(x=>{const f=factOf(x);return`<tr><td class="chk">${f||x.estado==='Cancelado'?'':`<input type="checkbox" data-sel="${x.id}" aria-label="Seleccionar viaje"${ui.sel.has(x.id)?' checked':''}>`}</td><td>${fdate(x.fecha)}</td><td>${placa(veh(x.vehiculo))}</td><td>${esc(cond(x.conductor)?.nombre||'—')}</td><td>${esc(x.origen)} → ${esc(x.destino)}</td><td>${esc(x.cliente||'—')}</td><td class="num">${x.km?nf.format(x.km):'—'}</td><td class="num">${x.valor?cop.format(x.valor):'—'}</td><td>${pill(x.estado)}</td><td>${f?`<button class="link factno" data-verfact="${f.id}">${esc(numFact(f))}</button>`:`<button class="link" data-facturar1="${x.id}"${x.estado==='Cancelado'?' hidden':''}>Facturar</button>`}</td><td class="act"><button class="link" data-edit="viajes" data-id="${x.id}">Editar</button></td></tr>`}).join(''):emptyRow(11,'Sin viajes en este periodo','Usa “Nuevo viaje” para registrar el primero.')}
   </tbody></table></div>`;
 }
 function vVehiculos(){
@@ -267,7 +308,18 @@ function vGastos(){
   ${rows.length?rows.map(g=>`<tr><td>${fdate(g.fecha)}</td><td>${placa(veh(g.vehiculo))}</td><td>${esc(g.tipo||'—')}</td><td>${esc(g.detalle||'—')}</td><td class="num">${g.galones?nf.format(g.galones):'—'}</td><td class="num">${g.galones&&g.valor?cop.format(g.valor/g.galones):'—'}</td><td class="num">${cop.format(num(g.valor))}</td><td class="act"><button class="link" data-edit="gastos" data-id="${g.id}">Editar</button></td></tr>`).join(''):emptyRow(8,'Sin gastos en este periodo','Registra tanqueos, peajes o mantenimientos con “Nuevo gasto”.')}
   </tbody></table></div>`;
 }
-const VIEWS={resumen:vResumen,viajes:vViajes,vehiculos:vVehiculos,conductores:vConductores,gastos:vGastos};
+function vFacturas(){
+  const rows=[...S.facturas].sort((a,b)=>num(b.numero)-num(a.numero));
+  const pend=rows.filter(f=>f.estado!=='Pagada'&&f.estado!=='Anulada').reduce((a,f)=>a+num(f.total),0);
+  const e=empresa();
+  return`<div class="bar"><div class="grow"><h1>Facturas</h1><p class="sub">${rows.length} documentos · ${cop.format(pend)} por cobrar</p></div>
+  <button data-empresa="1">Datos de la empresa</button><button class="primary" data-gotoviajes="1">+ Facturar viajes</button></div>
+  ${e.nit?'':`<div class="note">Completa los <b>datos de la empresa</b> (NIT, celular, cuenta para pagos) para que salgan en tus facturas.</div>`}
+  <div class="tbl"><table><thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th class="num">Viajes</th><th class="num">Total</th><th>Estado</th><th></th></tr></thead><tbody>
+  ${rows.length?rows.map(f=>`<tr><td class="factno">${esc(numFact(f))}</td><td>${fdate(f.fecha)}</td><td>${esc(f.cliente)}${f.clienteId?` <span class="muted">· ${esc(f.clienteId)}</span>`:''}</td><td class="num">${(f.items||[]).length}</td><td class="num">${cop.format(num(f.total))}</td><td>${pill(f.estado)}</td><td class="act"><button class="link" data-verfact="${f.id}">Ver e imprimir</button>${f.estado==='Pendiente'?`<button class="link" data-pagar="${f.id}">Marcar pagada</button>`:''}</td></tr>`).join(''):emptyRow(7,'Aún no hay facturas','En la pestaña Viajes marca uno o varios viajes y pulsa “Facturar”.')}
+  </tbody></table></div>`;
+}
+const VIEWS={resumen:vResumen,viajes:vViajes,vehiculos:vVehiculos,conductores:vConductores,gastos:vGastos,facturas:vFacturas};
 function route(){const h=location.hash.slice(1);return VIEWS[h]?h:'resumen'}
 function render(){
   const r=route();
@@ -282,11 +334,19 @@ $('#main').addEventListener('change',e=>{
   const id=e.target.id, v=e.target.value;
   const map={fResMes:'resumenMes',fViaMes:'viajesMes',fViaVeh:'viajesVeh',fGasMes:'gastosMes',fGasVeh:'gastosVeh'};
   if(map[id]){ui[map[id]]=v;render()}
+  if(e.target.dataset.sel){const s=e.target.dataset.sel;e.target.checked?ui.sel.add(s):ui.sel.delete(s);render()}
 });
 $('#main').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.new)openForm(b.dataset.new);
   if(b.dataset.edit)openForm(b.dataset.edit,b.dataset.id);
+  if(b.dataset.clearsel){ui.sel.clear();render()}
+  if(b.dataset.facturar)openFacturar([...ui.sel]);
+  if(b.dataset.facturar1)openFacturar([b.dataset.facturar1]);
+  if(b.dataset.verfact)verFactura(b.dataset.verfact);
+  if(b.dataset.empresa)openForm('config','empresa');
+  if(b.dataset.gotoviajes)location.hash='viajes';
+  if(b.dataset.pagar){const f=S.facturas.find(x=>x.id===b.dataset.pagar);if(f){const{id,...d}=f;save('facturas',id,{...d,estado:'Pagada'}).then(()=>toast('Factura marcada como pagada'),err=>toast(errMsg(err)))}}
 });
 
 /* ---------- Formulario ---------- */
@@ -305,10 +365,10 @@ function openForm(c,id){
   const sc=SCHEMA[c], rec=id?S[c].find(x=>x.id===id):null;
   if((c==='viajes'||c==='gastos')&&!S.vehiculos.length){toast('Primero registra al menos un vehículo.');location.hash='vehiculos';return}
   cur={c,id};delArmed=false;
-  $('#dlgTitle').textContent=(rec?'Editar ':'Nuevo ')+sc.one;
+  $('#dlgTitle').textContent=c==='config'?'Datos de la empresa':(rec?'Editar ':'Nuevo ')+sc.one;
   $('#dlgBody').innerHTML=sc.fields.map(f=>field(f,rec?rec[f.k]:(f.def?f.def():(f.t==='select'&&f.o?f.o[0]:'')))).join('');
   if(c==='viajes'&&!rec&&ui.viajesVeh)$('#f_vehiculo').value=ui.viajesVeh;
-  $('#delBtn').hidden=!rec;$('#delBtn').textContent='Eliminar';
+  $('#delBtn').hidden=!rec||c==='config';$('#delBtn').textContent='Eliminar';
   dlg.showModal();
 }
 // Al elegir vehículo en un viaje, sugiere el conductor asignado
@@ -337,6 +397,112 @@ $('#frm').addEventListener('submit',async e=>{
 });
 function errMsg(e){if(e&&e.code==='invalid_argument')return'No tienes permiso para editar estos datos.';if(e&&e.code==='quota_exceeded')return'Se llenó el espacio de datos. Elimina registros viejos.';return'No se pudo guardar. Intenta de nuevo.'}
 let tt;function toast(m){document.querySelector('.toast')?.remove();const d=document.createElement('div');d.className='toast';d.setAttribute('role','status');d.textContent=m;document.body.appendChild(d);clearTimeout(tt);tt=setTimeout(()=>d.remove(),2600)}
+
+/* ---------- Facturación ---------- */
+const empresa=()=>S.config.find(x=>x.id==='empresa')||{nombre:'Transporte Carro Viejo',tipoDoc:'Cuenta de cobro',inicio:1};
+const factOf=v=>v.factura?S.facturas.find(f=>f.id===v.factura&&f.estado!=='Anulada'):null;
+const numFact=f=>(f.prefijo||'')+String(f.numero).padStart(4,'0');
+function nextNum(){const e=empresa();const used=S.facturas.map(f=>num(f.numero));return Math.max(num(e.inicio)||1,used.length?Math.max(...used)+1:0)}
+function letras(n){
+  n=Math.floor(Math.abs(n));if(n===0)return'cero pesos';if(n===1)return'un peso';
+  const U=['','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve','veinte','veintiuno','veintidós','veintitrés','veinticuatro','veinticinco','veintiséis','veintisiete','veintiocho','veintinueve'];
+  const T=['','','','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
+  const H=['','ciento','doscientos','trescientos','cuatrocientos','quinientos','seiscientos','setecientos','ochocientos','novecientos'];
+  const ap=s=>s.replace(/veintiuno$/,'veintiún').replace(/uno$/,'un');
+  const d2=n=>n<30?U[n]:T[Math.floor(n/10)]+(n%10?' y '+U[n%10]:'');
+  const d3=n=>n===100?'cien':[H[Math.floor(n/100)],n%100?d2(n%100):''].filter(Boolean).join(' ');
+  const d6=n=>{const t=Math.floor(n/1000),r=n%1000;return[t===0?'':t===1?'mil':ap(d3(t))+' mil',r?d3(r):''].filter(Boolean).join(' ')};
+  const m=Math.floor(n/1e6),r=n%1e6;
+  let s=[m===0?'':m===1?'un millón':ap(d6(m))+' millones',r?d6(r):''].filter(Boolean).join(' ');
+  s=ap(s);return s+(r===0?' de pesos':' pesos');
+}
+function invoiceHTML(f){
+  const e=f.empresa||empresa();
+  const cap=t=>t.charAt(0).toUpperCase()+t.slice(1);
+  return`<div class="inv">
+  <div class="ih"><div><div class="emp">${esc(e.nombre||'Transporte Carro Viejo')}</div>
+   <div>${e.nit?'NIT / C.C. '+esc(e.nit):''}</div><div>${esc([e.direccion,e.ciudad].filter(Boolean).join(' · '))}</div><div>${esc([e.telefono,e.correo].filter(Boolean).join(' · '))}</div></div>
+   <div class="doc"><b>${esc(f.tipoDoc||e.tipoDoc||'Cuenta de cobro')}</b><span class="no">N.º ${esc(numFact(f))}</span><div>Fecha: ${fdate(f.fecha)}</div></div></div>
+  <div class="cli"><div><div class="lbl">Cliente</div><b>${esc(f.cliente)}</b></div><div><div class="lbl">NIT / C.C.</div>${esc(f.clienteId||'—')}</div>
+   <div><div class="lbl">Dirección</div>${esc(f.clienteDir||'—')}</div><div><div class="lbl">Teléfono</div>${esc(f.clienteTel||'—')}</div></div>
+  <table><thead><tr><th>Fecha</th><th>Descripción del servicio</th><th>Placa</th><th class="num">Km</th><th class="num">Valor</th></tr></thead><tbody>
+  ${(f.items||[]).map(i=>`<tr><td>${fdate(i.fecha)}</td><td>${esc(i.desc)}</td><td>${esc(i.placa||'—')}</td><td class="num">${i.km?nf.format(i.km):'—'}</td><td class="num">${cop.format(num(i.valor))}</td></tr>`).join('')}
+  <tr class="tot"><td colspan="4" style="text-align:right">TOTAL</td><td class="num">${cop.format(num(f.total))}</td></tr></tbody></table>
+  <div class="let"><span class="lbl">Son:</span> ${esc(cap(letras(num(f.total))))} M/CTE</div>
+  ${f.notas?`<p>${esc(f.notas)}</p>`:''}
+  <div class="pie"><div>${e.pago?`<div class="lbl">Consignar a</div>${esc(e.pago)}`:''}${e.pie?`<p class="muted" style="color:#5d6570">${esc(e.pie)}</p>`:''}</div><div class="firma">Firma y sello<br>${esc(e.nombre||'')}</div></div>
+  </div>`;
+}
+const invDlg=$('#inv');let invCur=null;
+function openFacturar(ids){
+  const vs=ids.map(id=>S.viajes.find(v=>v.id===id)).filter(v=>v&&!factOf(v)&&v.estado!=='Cancelado').sort((a,b)=>a.fecha<b.fecha?-1:1);
+  if(!vs.length){toast('Esos viajes ya están facturados.');return}
+  const items=vs.map(v=>{const vh=veh(v.vehiculo);return{viajeId:v.id,fecha:v.fecha,desc:`Servicio de transporte ${v.origen||''} → ${v.destino||''}`.trim(),placa:vh?vh.placa:'',km:v.km||null,valor:num(v.valor)}});
+  const e=empresa();
+  invCur={draft:{numero:nextNum(),prefijo:e.prefijo||'',tipoDoc:e.tipoDoc||'Cuenta de cobro',fecha:TODAY,cliente:vs[0].cliente||'',clienteId:'',clienteDir:'',clienteTel:'',notas:'',items,total:items.reduce((a,i)=>a+i.valor,0),estado:'Pendiente'}};
+  $('#invTitle').textContent='Facturar '+vs.length+' viaje'+(vs.length>1?'s':'');
+  const d=invCur.draft;
+  $('#invBody').innerHTML=`<div class="igrid">
+   <label for="i_cliente">Cliente *<input id="i_cliente" value="${esc(d.cliente)}"></label>
+   <label for="i_clienteId">NIT o cédula<input id="i_clienteId"></label>
+   <label for="i_clienteTel">Teléfono<input id="i_clienteTel"></label>
+   <label for="i_clienteDir">Dirección<input id="i_clienteDir"></label>
+   <label for="i_fecha">Fecha<input id="i_fecha" type="date" value="${d.fecha}"></label>
+   <label for="i_numero">Número<input id="i_numero" type="number" min="1" value="${d.numero}"></label>
+   <label for="i_notas" style="grid-column:1/-1">Nota (opcional)<input id="i_notas" placeholder="Ej.: pago a 15 días"></label></div>
+   <div class="paper" id="invPrev"></div>`;
+  $('#invFoot').innerHTML=`<button type="button" class="left" data-empresa2="1">Datos de la empresa</button><button type="button" data-cerrar="1">Cancelar</button><button type="submit" class="primary">Guardar factura</button>`;
+  prev();invDlg.showModal();
+}
+function readDraft(){const d=invCur.draft;['cliente','clienteId','clienteTel','clienteDir','fecha','notas'].forEach(k=>d[k]=$('#i_'+k).value.trim());d.numero=num($('#i_numero').value)||d.numero;return d}
+function prev(){if(invCur&&invCur.draft&&$('#invPrev'))$('#invPrev').innerHTML=invoiceHTML({...readDraft(),empresa:empresa()})}
+$('#invBody').addEventListener('input',prev);
+$('#invFrm').addEventListener('submit',async e=>{
+  e.preventDefault();if(!invCur||!invCur.draft)return;
+  const d=readDraft();
+  if(!d.cliente){$('#i_cliente').focus();toast('Escribe el nombre del cliente.');return}
+  if(S.facturas.some(f=>num(f.numero)===d.numero&&(f.prefijo||'')===d.prefijo)){toast('Ya existe la factura número '+d.numero+'.');return}
+  const id=uid();const{id:_e,...emp}=empresa();const rec={...d,empresa:emp};
+  try{
+    await save('facturas',id,rec);
+    for(const it of d.items){const v=S.viajes.find(x=>x.id===it.viajeId);if(v){const{id:vid,...vd}=v;await save('viajes',vid,{...vd,factura:id,cliente:vd.cliente||d.cliente})}}
+    d.items.forEach(i=>ui.sel.delete(i.viajeId));
+    toast('Factura '+numFact(d)+' guardada');showFactura({...rec,id});render();
+  }catch(err){toast(errMsg(err))}
+});
+function verFactura(id){const f=S.facturas.find(x=>x.id===id);if(f)showFactura(f)}
+let dlCap;
+async function showFactura(f){
+  invCur={view:f};
+  $('#invTitle').textContent=(f.tipoDoc||'Factura')+' '+numFact(f);
+  $('#invBody').innerHTML=`<div class="paper">${invoiceHTML(f)}</div>`;
+  if(dlCap===undefined){try{dlCap=window.claude&&window.claude.use?await window.claude.use('downloads'):null}catch(e){dlCap=null}}
+  const inClaude=mode==='db';
+  $('#invFoot').innerHTML=`${f.estado!=='Anulada'?`<button type="button" class="danger left" data-anular="1">Anular</button>`:''}<button type="button" data-cerrar="1">Cerrar</button>${!inClaude?`<button type="button" class="primary" data-imprimir="1">Imprimir</button>`:''}${dlCap?`<button type="button" class="primary" data-descargar="1">Descargar para imprimir</button>`:''}`;
+  if(!invDlg.open)invDlg.showModal();
+}
+let anularArmed=false;
+$('#invFoot').addEventListener('click',async e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.cerrar){invDlg.close();invCur=null}
+  if(b.dataset.empresa2){invDlg.close();openForm('config','empresa')}
+  if(b.dataset.imprimir){$('#printArea').innerHTML=invoiceHTML(invCur.view);window.print()}
+  if(b.dataset.descargar){
+    const f=invCur.view;
+    const css=[...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');
+    const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc((f.tipoDoc||'Factura')+' '+numFact(f))}</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap"><style>${css}\nbody{background:#fff;margin:0;padding:24px}.inv{min-width:0;max-width:800px;margin:0 auto}@media print{body{padding:0}}</style></head><body>${invoiceHTML(f)}<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script></body></html>`;
+    try{await dlCap.save({filename:`${(f.tipoDoc||'Factura').replace(/\s+/g,'-')}-${numFact(f)}.html`,data:html});toast('Ábrelo y se mostrará la ventana de impresión')}
+    catch(err){if(err&&err.code!=='declined')toast('No se pudo descargar el archivo.')}
+  }
+  if(b.dataset.anular){
+    if(!anularArmed){anularArmed=true;b.textContent='¿Anular? Toca otra vez';setTimeout(()=>{anularArmed=false},4000);return}
+    anularArmed=false;const f=invCur.view;const{id,...d}=f;
+    try{await save('facturas',id,{...d,estado:'Anulada'});
+      for(const it of f.items||[]){const v=S.viajes.find(x=>x.id===it.viajeId);if(v&&v.factura===id){const{id:vid,factura,...vd}=v;await save('viajes',vid,vd)}}
+      invDlg.close();toast('Factura anulada; los viajes quedan libres para facturar de nuevo')}catch(err){toast(errMsg(err))}
+  }
+});
+estadoCls.Pendiente='warn';estadoCls.Pagada='ok';estadoCls.Anulada='bad';
 
 render();initStore();
 </script>

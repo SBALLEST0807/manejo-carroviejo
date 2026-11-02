@@ -139,6 +139,10 @@ dialog.wide{width:min(860px,calc(100vw - 32px))}
 .inv td{height:27px;padding:3px 8px;border-bottom:1px solid var(--g);border-left:1.5px solid var(--g);color:#16181b;font-family:"Source Sans 3",Arial,sans-serif;font-size:13px;vertical-align:middle}
 .inv th:first-child,.inv td:first-child{border-left:0}
 .inv tr:last-child td{border-bottom:0}
+.iline{display:grid;grid-template-columns:90px minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);margin-bottom:8px}
+.iline .idesc{grid-column:1/-1}
+.ival span{display:block;font-size:13px;font-weight:600;color:var(--muted)}.ival b{display:block;font-family:var(--font-mono);font-size:15px;padding:8px 0}
+@media (max-width:520px){.iline{grid-template-columns:80px minmax(0,1fr)}.iline .ival{grid-column:1/2}}
 .inv td.det{white-space:pre-line;height:auto;min-height:27px;line-height:1.3;padding:5px 8px}
 .inv td.c{text-align:center}.inv td.r{text-align:right;font-variant-numeric:tabular-nums}
 .inv .pie{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
@@ -162,7 +166,7 @@ dialog.wide{width:min(860px,calc(100vw - 32px))}
 <header><div class="wrap">
   <div class="top"><div class="brand"><img id="brandJeep" alt=""><span><small>Transporte</small>Carro Viejo</span></div><div class="mode" id="mode">Cargando datos…</div></div>
   <nav id="nav">
-    <a href="#resumen">Resumen</a><a href="#viajes">Viajes</a><a href="#vehiculos">Vehículos</a><a href="#conductores">Conductores</a><a href="#gastos">Gastos</a><a href="#facturas">Facturas</a>
+    <a href="#resumen">Resumen</a><a href="#viajes">Viajes</a><a href="#vehiculos">Vehículos</a><a href="#conductores">Conductores</a><a href="#clientes">Clientes</a><a href="#gastos">Gastos</a><a href="#facturas">Facturas</a>
   </nav>
 </div></header>
 <main class="wrap" id="main"></main>
@@ -180,8 +184,8 @@ dialog.wide{width:min(860px,calc(100vw - 32px))}
 </form></dialog>
 
 <script>
-const COLS=['vehiculos','conductores','viajes','gastos','facturas','config'];
-const S={vehiculos:[],conductores:[],viajes:[],gastos:[],facturas:[],config:[]};
+const COLS=['vehiculos','conductores','clientes','viajes','gastos','facturas','config'];
+const S={vehiculos:[],conductores:[],clientes:[],viajes:[],gastos:[],facturas:[],config:[]};
 const loaded={};
 let mode='loading', db=null;
 const $=s=>document.querySelector(s);
@@ -218,11 +222,14 @@ const SCHEMA={
     {k:'nombre',l:'Nombre completo',req:1,full:1},{k:'cedula',l:'Cédula'},{k:'telefono',l:'Celular',ph:'300 000 0000'},
     {k:'categoria',l:'Categoría licencia',t:'select',o:['B1','B2','B3','C1','C2','C3']},{k:'licencia',l:'Vence licencia',t:'date'},
     {k:'vehiculo',l:'Vehículo asignado',t:'select',opts:vehOpts,blank:'Sin asignar',full:1}]},
+  clientes:{one:'cliente',fields:[
+    {k:'nombre',l:'Nombre o razón social',req:1,full:1},{k:'documento',l:'C.C. ó NIT'},{k:'telefono',l:'Teléfono',ph:'300 000 0000'},
+    {k:'direccion',l:'Dirección',full:1},{k:'ciudad',l:'Ciudad'},{k:'correo',l:'Correo'},{k:'notas',l:'Notas',t:'textarea',full:1}]},
   viajes:{one:'viaje',fields:[
     {k:'fecha',l:'Fecha',t:'date',req:1,def:()=>TODAY},{k:'estado',l:'Estado',t:'select',o:['Programado','En curso','Completado','Cancelado']},
     {k:'vehiculo',l:'Vehículo',t:'select',opts:vehOpts,req:1},{k:'conductor',l:'Conductor',t:'select',opts:condOpts,blank:'—'},
     {k:'origen',l:'Origen',req:1},{k:'destino',l:'Destino',req:1},
-    {k:'cliente',l:'Cliente / pasajero'},{k:'km',l:'Km recorridos',t:'number'},
+    {k:'cliente',l:'Cliente / pasajero',list:'cliList'},{k:'km',l:'Km recorridos',t:'number'},
     {k:'valor',l:'Valor cobrado (COP)',t:'number',full:1},{k:'notas',l:'Detalle (sale en la factura)',t:'textarea',full:1}]},
   gastos:{one:'gasto',fields:[
     {k:'fecha',l:'Fecha',t:'date',req:1,def:()=>TODAY},{k:'tipo',l:'Tipo',t:'select',o:['Combustible','Mantenimiento','Peaje','Parqueadero','Lavado','Llantas','Seguro','Otro']},
@@ -353,13 +360,24 @@ function vFacturas(){
   const e=empresa();
   const npdf=rows.filter(f=>f.pdfUrl).length;
   return`<div class="bar"><div class="grow"><h1>Facturas</h1><p class="sub">${rows.length} documentos · ${cop.format(pend)} por cobrar · ${npdf} PDF guardados en el archivo</p></div>
-  <button data-empresa="1">Datos de la empresa</button><button class="primary" data-gotoviajes="1">+ Facturar viajes</button></div>
+  <button data-empresa="1">Datos de la empresa</button><button data-gotoviajes="1">Facturar viajes</button><button class="primary" data-nuevafact="1">+ Nueva factura</button></div>
   ${e.nit?'':`<div class="note">Completa los <b>datos de la empresa</b> (NIT, celular, cuenta para pagos) para que salgan en tus facturas.</div>`}
   <div class="tbl"><table><thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th class="num">Viajes</th><th class="num">Total</th><th>Estado</th><th>PDF</th><th></th></tr></thead><tbody>
   ${rows.length?rows.map(f=>`<tr><td class="factno">${esc(numFact(f))}</td><td>${fdate(f.fecha)}</td><td>${esc(f.cliente)}${f.clienteId?` <span class="muted">· ${esc(f.clienteId)}</span>`:''}</td><td class="num">${(f.items||[]).length}</td><td class="num">${cop.format(num(f.total))}</td><td>${pill(f.estado)}</td><td>${f.pdfUrl?`<a class="pdflink" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">${esc(pdfName(f))}</a>`:`<button class="link" data-genpdf="${f.id}">Guardar PDF</button>`}</td><td class="act"><button class="link" data-verfact="${f.id}">Ver</button>${f.estado==='Pendiente'?`<button class="link" data-pagar="${f.id}">Marcar pagada</button>`:''}</td></tr>`).join(''):emptyRow(8,'Aún no hay facturas','En la pestaña Viajes marca uno o varios viajes y pulsa “Facturar”.')}
   </tbody></table></div>`;
 }
-const VIEWS={resumen:vResumen,viajes:vViajes,vehiculos:vVehiculos,conductores:vConductores,gastos:vGastos,facturas:vFacturas};
+function vClientes(){
+  const q=(ui.cliQ||'').toLowerCase();
+  const rows=[...S.clientes].filter(c=>!q||[c.nombre,c.documento,c.telefono].join(' ').toLowerCase().includes(q)).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+  const stat=c=>{const fs=S.facturas.filter(f=>f.estado!=='Anulada'&&(f.clienteRef===c.id||(!f.clienteRef&&normName(f.cliente)===normName(c.nombre))));return{n:fs.length,pend:fs.filter(f=>f.estado==='Pendiente').reduce((a,f)=>a+num(f.total),0)}};
+  return`<div class="bar"><div class="grow"><h1>Clientes</h1><p class="sub">${S.clientes.length} clientes registrados · sus datos salen solos en la factura</p></div>
+  <div class="filters"><label>Buscar<input id="fCliQ" value="${esc(ui.cliQ||'')}" placeholder="Nombre, cédula o teléfono"></label></div>
+  <button class="primary" data-new="clientes">+ Nuevo cliente</button></div>
+  <div class="tbl"><table><thead><tr><th>Nombre</th><th>C.C. ó NIT</th><th>Teléfono</th><th>Dirección</th><th class="num">Facturas</th><th class="num">Por cobrar</th><th></th></tr></thead><tbody>
+  ${rows.length?rows.map(c=>{const st=stat(c);return`<tr><td><b>${esc(c.nombre)}</b></td><td>${esc(c.documento||'—')}</td><td>${esc(c.telefono||'—')}</td><td>${esc([c.direccion,c.ciudad].filter(Boolean).join(', ')||'—')}</td><td class="num">${st.n}</td><td class="num">${st.pend?cop.format(st.pend):'—'}</td><td class="act"><button class="link" data-factcli="${c.id}">Facturar</button><button class="link" data-edit="clientes" data-id="${c.id}">Editar</button></td></tr>`}).join(''):emptyRow(7,q?'Ningún cliente coincide':'Aún no hay clientes','Registra uno con “Nuevo cliente”. También se guardan solos al hacer una factura.')}
+  </tbody></table></div>`;
+}
+const VIEWS={resumen:vResumen,viajes:vViajes,vehiculos:vVehiculos,conductores:vConductores,clientes:vClientes,gastos:vGastos,facturas:vFacturas};
 function route(){const h=location.hash.slice(1);return VIEWS[h]?h:'resumen'}
 function render(){
   const r=route();
@@ -372,10 +390,11 @@ addEventListener('hashchange',()=>{render();scrollTo(0,0)});
 /* ---------- Filtros y botones ---------- */
 $('#main').addEventListener('change',e=>{
   const id=e.target.id, v=e.target.value;
-  const map={fResMes:'resumenMes',fViaMes:'viajesMes',fViaVeh:'viajesVeh',fGasMes:'gastosMes',fGasVeh:'gastosVeh'};
+  const map={fCliQ:'cliQ',fResMes:'resumenMes',fViaMes:'viajesMes',fViaVeh:'viajesVeh',fGasMes:'gastosMes',fGasVeh:'gastosVeh'};
   if(map[id]){ui[map[id]]=v;render()}
   if(e.target.dataset.sel){const s=e.target.dataset.sel;e.target.checked?ui.sel.add(s):ui.sel.delete(s);render()}
 });
+$('#main').addEventListener('input',e=>{if(e.target.id==='fCliQ'){ui.cliQ=e.target.value;const pos=e.target.selectionStart;render();const i=$('#fCliQ');if(i){i.focus();i.setSelectionRange(pos,pos)}}});
 $('#main').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.new)openForm(b.dataset.new);
@@ -386,6 +405,8 @@ $('#main').addEventListener('click',e=>{
   if(b.dataset.verfact)verFactura(b.dataset.verfact);
   if(b.dataset.empresa)openForm('config','empresa');
   if(b.dataset.gotoviajes)location.hash='viajes';
+  if(b.dataset.nuevafact)openFacturar([],null);
+  if(b.dataset.factcli)openFacturar([],b.dataset.factcli);
   if(b.dataset.genpdf){const f=S.facturas.find(x=>x.id===b.dataset.genpdf);if(f){b.disabled=true;b.textContent='Generando…';archivarPdf(f).then(ok=>{if(!ok){b.disabled=false;b.textContent='Guardar PDF'}})}}
   if(b.dataset.pagar){const f=S.facturas.find(x=>x.id===b.dataset.pagar);if(f){const{id,...d}=f;save('facturas',id,{...d,estado:'Pagada'}).then(()=>toast('Factura marcada como pagada'),err=>toast(errMsg(err)))}}
 });
@@ -399,7 +420,7 @@ function field(f,val){
     const opts=f.opts?f.opts():f.o.map(o=>[o,o]);
     inp=`<select id="${id}" name="${f.k}"${req}>${f.blank||f.opts?`<option value="">${esc(f.blank||'Selecciona…')}</option>`:''}${opts.map(([v,l])=>`<option value="${esc(v)}"${String(v)===String(val??'')?' selected':''}>${esc(l)}</option>`).join('')}</select>`;
   }else if(f.t==='textarea') inp=`<textarea id="${id}" name="${f.k}" rows="2">${esc(val)}</textarea>`;
-  else inp=`<input id="${id}" name="${f.k}" type="${f.t||'text'}"${f.t==='number'?` inputmode="decimal" step="${f.step||'any'}" min="0"`:''} value="${esc(val)}" placeholder="${esc(f.ph||'')}"${req}>`;
+  else inp=`<input id="${id}" name="${f.k}" type="${f.t||'text'}"${f.t==='number'?` inputmode="decimal" step="${f.step||'any'}" min="0"`:''} value="${esc(val)}" placeholder="${esc(f.ph||'')}"${f.list?` list="${f.list}" autocomplete="off"`:''}${req}>${f.list?cliDatalist(f.list):''}`;
   return`<label${cls} for="${id}">${esc(f.l)}${f.req?' *':''}${inp}</label>`;
 }
 function openForm(c,id){
@@ -463,7 +484,7 @@ function invoiceHTML(f){
   const e={...EMP_DEF,...(f.empresa||empresa())};
   const [y,m,d]=(f.fecha||'').split('-');
   const items=f.items||[];
-  const filas=items.map(i=>`<tr><td class="c">1</td><td class="det">${esc(i.desc)}</td><td class="r">${cop.format(num(i.valor))}</td><td class="r">${cop.format(num(i.valor))}</td></tr>`);
+  const filas=items.map(i=>{const c=i.cant==null?1:num(i.cant),u=i.unit==null?num(i.valor):num(i.unit);return`<tr><td class="c">${nf.format(c)}</td><td class="det">${esc(i.desc)}</td><td class="r">${cop.format(u)}</td><td class="r">${cop.format(num(i.valor))}</td></tr>`});
   for(let k=items.length;k<14;k++)filas.push('<tr><td></td><td></td><td></td><td></td></tr>');
   const nom=String(e.nombre||'Transporte Carro Viejo').replace(/^transporte\s+/i,'');
   return`<div class="inv${f.estado==='Anulada'?' anul':''}">
@@ -487,34 +508,71 @@ function invoiceHTML(f){
   </div>`;
 }
 const invDlg=$('#inv');let invCur=null;
-function openFacturar(ids){
+const normName=t=>String(t||'').trim().toLowerCase().replace(/\s+/g,' ');
+const cliByName=n=>S.clientes.find(c=>normName(c.nombre)===normName(n));
+function cliDatalist(id){return`<datalist id="${id}">${S.clientes.map(c=>`<option value="${esc(c.nombre)}">${esc(c.documento||'')}</option>`).join('')}</datalist>`}
+function openFacturar(ids,cliId){
   const vs=ids.map(id=>S.viajes.find(v=>v.id===id)).filter(v=>v&&!factOf(v)&&v.estado!=='Cancelado').sort((a,b)=>a.fecha<b.fecha?-1:1);
-  if(!vs.length){toast('Esos viajes ya están facturados.');return}
-  const items=vs.map(v=>{const vh=veh(v.vehiculo);return{viajeId:v.id,fecha:v.fecha,desc:[[`Servicio de transporte ${v.origen||''} → ${v.destino||''}`,fdate(v.fecha),vh&&vh.placa?'Placa '+vh.placa:''].filter(Boolean).join(' · '),String(v.notas||'').trim()].filter(Boolean).join('\n'),placa:vh?vh.placa:'',km:v.km||null,valor:num(v.valor)}});
+  if(ids.length&&!vs.length){toast('Esos viajes ya están facturados.');return}
+  const items=vs.map(v=>{const vh=veh(v.vehiculo);return{viajeId:v.id,fecha:v.fecha,desc:[[`Servicio de transporte ${v.origen||''} → ${v.destino||''}`,fdate(v.fecha),vh&&vh.placa?'Placa '+vh.placa:''].filter(Boolean).join(' · '),String(v.notas||'').trim()].filter(Boolean).join('\n'),placa:vh?vh.placa:'',km:v.km||null,cant:1,unit:num(v.valor),valor:num(v.valor)}});
+  if(!items.length)items.push({desc:'',cant:1,unit:0,valor:0});
   const e=empresa();
-  invCur={draft:{numero:nextNum(),prefijo:e.prefijo||'',tipoDoc:e.tipoDoc||'Cuenta de cobro',fecha:TODAY,cliente:vs[0].cliente||'',clienteId:'',clienteDir:'',clienteTel:'',notas:'',items,total:items.reduce((a,i)=>a+i.valor,0),estado:'Pendiente'}};
-  $('#invTitle').textContent='Facturar '+vs.length+' viaje'+(vs.length>1?'s':'');
+  const c=cliId?S.clientes.find(x=>x.id===cliId):cliByName(vs[0]?.cliente);
+  invCur={draft:{numero:nextNum(),prefijo:e.prefijo||'',tipoDoc:e.tipoDoc||'Factura de venta',fecha:TODAY,cliente:c?c.nombre:(vs[0]?.cliente||''),clienteRef:c?c.id:'',clienteId:c?.documento||'',clienteDir:[c?.direccion,c?.ciudad].filter(Boolean).join(', '),clienteTel:c?.telefono||'',notas:'',items,total:0,estado:'Pendiente'}};
+  $('#invTitle').textContent=vs.length?'Facturar '+vs.length+' viaje'+(vs.length>1?'s':''):'Nueva factura';
   const d=invCur.draft;
   $('#invBody').innerHTML=`<div class="igrid">
-   <label for="i_cliente">Cliente *<input id="i_cliente" value="${esc(d.cliente)}"></label>
-   <label for="i_clienteId">NIT o cédula<input id="i_clienteId"></label>
-   <label for="i_clienteTel">Teléfono<input id="i_clienteTel"></label>
-   <label for="i_clienteDir">Dirección<input id="i_clienteDir"></label>
+   <label for="i_cliente">Cliente *<input id="i_cliente" list="iCliList" autocomplete="off" placeholder="Escribe o elige un cliente" value="${esc(d.cliente)}">${cliDatalist('iCliList')}</label>
+   <label for="i_clienteId">C.C. ó NIT<input id="i_clienteId" value="${esc(d.clienteId)}"></label>
+   <label for="i_clienteTel">Teléfono<input id="i_clienteTel" value="${esc(d.clienteTel)}"></label>
+   <label for="i_clienteDir">Dirección<input id="i_clienteDir" value="${esc(d.clienteDir)}"></label>
    <label for="i_fecha">Fecha<input id="i_fecha" type="date" value="${d.fecha}"></label>
    <label for="i_numero">Número<input id="i_numero" type="number" min="1" value="${d.numero}"></label>
-   <label for="i_notas" style="grid-column:1/-1">Nota (opcional)<input id="i_notas" placeholder="Ej.: pago a 15 días"></label>
-   ${d.items.map((it,k)=>`<label for="i_desc_${k}" style="grid-column:1/-1">Detalle ${d.items.length>1?'del viaje '+(k+1):''} (así sale en la factura)<textarea id="i_desc_${k}" rows="3">${esc(it.desc)}</textarea></label>`).join('')}</div>
+   <label for="i_notas" style="grid-column:1/-1">Nota (opcional)<input id="i_notas" placeholder="Ej.: pago a 15 días"></label></div>
+   <div><h2 style="margin:4px 0 8px">Detalle de la factura</h2><div id="iLines"></div>
+   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px"><button type="button" data-addline="1">+ Agregar línea</button><b id="iTotal" style="font-family:var(--font-mono)"></b></div></div>
    <div class="paper" id="invPrev"></div>`;
   $('#invFoot').innerHTML=`<button type="button" class="left" data-empresa2="1">Datos de la empresa</button><button type="button" data-cerrar="1">Cancelar</button><button type="submit" class="primary">Guardar factura</button>`;
-  prev();invDlg.showModal();
+  drawLines();prev();invDlg.showModal();
 }
-function readDraft(){const d=invCur.draft;['cliente','clienteId','clienteTel','clienteDir','fecha','notas'].forEach(k=>d[k]=$('#i_'+k).value.trim());d.items.forEach((it,k)=>{const t=$('#i_desc_'+k);if(t)it.desc=t.value.trim()});d.numero=num($('#i_numero').value)||d.numero;return d}
+function drawLines(){
+  const d=invCur.draft;
+  $('#iLines').innerHTML=d.items.map((it,k)=>`<div class="iline">
+   <label for="i_cant_${k}">Cant.<input id="i_cant_${k}" type="number" inputmode="decimal" min="0" step="any" value="${esc(it.cant)}"></label>
+   <label for="i_unit_${k}">Vr. unitario<input id="i_unit_${k}" type="number" inputmode="decimal" min="0" step="any" value="${esc(it.unit)}"></label>
+   <div class="ival"><span>Valor total</span><b id="i_val_${k}">${cop.format(num(it.valor))}</b></div>
+   ${d.items.length>1?`<button type="button" class="link" data-delline="${k}">Quitar</button>`:'<span></span>'}
+   <label for="i_desc_${k}" class="idesc">Detalle (así sale en la factura)<textarea id="i_desc_${k}" rows="2">${esc(it.desc)}</textarea></label></div>`).join('');
+}
+function readDraft(){
+  const d=invCur.draft;['cliente','clienteId','clienteTel','clienteDir','fecha','notas'].forEach(k=>d[k]=$('#i_'+k).value.trim());
+  d.items.forEach((it,k)=>{const t=$('#i_desc_'+k);if(!t)return;it.desc=t.value.trim();it.cant=num($('#i_cant_'+k).value);it.unit=num($('#i_unit_'+k).value);it.valor=Math.round(it.cant*it.unit);const o=$('#i_val_'+k);if(o)o.textContent=cop.format(it.valor)});
+  d.total=d.items.reduce((a,i)=>a+num(i.valor),0);if($('#iTotal'))$('#iTotal').textContent='Total '+cop.format(d.total);
+  const c=cliByName(d.cliente);d.clienteRef=c?c.id:'';
+  d.numero=num($('#i_numero').value)||d.numero;return d}
+// Al elegir un cliente registrado, llena sus datos
+$('#invBody').addEventListener('change',e=>{
+  if(e.target.id!=='i_cliente')return;const c=cliByName(e.target.value);if(!c)return;
+  $('#i_clienteId').value=c.documento||'';$('#i_clienteTel').value=c.telefono||'';$('#i_clienteDir').value=[c.direccion,c.ciudad].filter(Boolean).join(', ');prev();
+});
+$('#invBody').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b||!invCur?.draft)return;
+  if(b.dataset.addline){readDraft();invCur.draft.items.push({desc:'',cant:1,unit:0,valor:0});drawLines();prev();$('#i_desc_'+(invCur.draft.items.length-1)).focus()}
+  if(b.dataset.delline){readDraft();invCur.draft.items.splice(num(b.dataset.delline),1);drawLines();prev()}
+});
 function prev(){if(invCur&&invCur.draft&&$('#invPrev'))$('#invPrev').innerHTML=invoiceHTML({...readDraft(),empresa:empresa()})}
 $('#invBody').addEventListener('input',prev);
 $('#invFrm').addEventListener('submit',async e=>{
   e.preventDefault();if(!invCur||!invCur.draft)return;
   const d=readDraft();
   if(!d.cliente){$('#i_cliente').focus();toast('Escribe el nombre del cliente.');return}
+  d.items=d.items.filter(i=>i.desc||i.valor||i.viajeId);
+  if(!d.items.length){toast('Agrega al menos una línea con detalle.');drawLines();return}
+  d.total=d.items.reduce((a,i)=>a+num(i.valor),0);
+  try{const c=cliByName(d.cliente);const dat={nombre:d.cliente,documento:d.clienteId,telefono:d.clienteTel,direccion:d.clienteDir};
+    if(!c){const cid=uid();await save('clientes',cid,{...dat,ciudad:'',correo:'',notas:''});d.clienteRef=cid}
+    else{d.clienteRef=c.id;const{id:cid,...cd}=c;const upd={...cd};let ch=false;for(const k of ['documento','telefono','direccion'])if(!cd[k]&&dat[k]){upd[k]=dat[k];ch=true}if(ch)await save('clientes',cid,upd)}
+  }catch(err){}
   if(S.facturas.some(f=>num(f.numero)===d.numero&&(f.prefijo||'')===d.prefijo)){toast('Ya existe la factura número '+d.numero+'.');return}
   const id=uid();const{id:_e,...emp}=empresa();const rec={...d,empresa:emp};
   try{

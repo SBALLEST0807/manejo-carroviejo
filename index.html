@@ -5,7 +5,7 @@
 /* Layout: barra superior con pestañas tipo señal vial; cada pestaña es una tabla operativa con su formulario en un diálogo. */
 :root{
   --bg:#eef0f2; --surface:#ffffff; --ink:#15191e; --muted:#5d6570; --line:#d5d9de; --soft:#e4e7eb;
-  --plate:#f2c400; --plate-ink:#111111;
+  --plate:#f2c400; --plate-ink:#111111; --brand:#1b7a3c; --brand-ink:#ffffff; --brand-soft:#e3f2e8;
   --ok:#1d7f47; --warn:#a8670f; --bad:#c22f2f;
   --font-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
   --font-body:"Source Sans 3","Segoe UI",Roboto,Arial,sans-serif;
@@ -13,8 +13,9 @@
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#111418; --surface:#191e24; --ink:#e7eaee; --muted:#9aa3ad; --line:#2b323a; --soft:#222830;
-  --ok:#4cc27f; --warn:#e3a840; --bad:#f06b6b; color-scheme:dark}}
+  --ok:#4cc27f; --warn:#e3a840; --bad:#f06b6b; --brand:#3fae66; --brand-ink:#0d1f14; --brand-soft:#16301f; color-scheme:dark}}
 :root[data-theme="dark"]{
+  --brand:#3fae66; --brand-ink:#0d1f14; --brand-soft:#16301f;
   --bg:#111418; --surface:#191e24; --ink:#e7eaee; --muted:#9aa3ad; --line:#2b323a; --soft:#222830;
   --ok:#4cc27f; --warn:#e3a840; --bad:#f06b6b; color-scheme:dark}
 *{box-sizing:border-box}
@@ -23,12 +24,15 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
 .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-block:12px 0}
-.brand{font-family:var(--font-display);font-weight:700;font-size:26px;letter-spacing:.02em;text-transform:uppercase;display:flex;align-items:center;gap:10px}
-.brand i{display:inline-block;width:26px;height:26px;background:var(--plate);border:2px solid var(--plate-ink);border-radius:4px;transform:rotate(45deg) scale(.8)}
+.brand{color:var(--brand);font-family:var(--font-display);font-weight:700;font-size:26px;letter-spacing:.02em;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.brand img{height:42px;width:auto;display:block}
+.brand span{display:flex;flex-direction:column;line-height:.95}.brand small{font-size:13px;letter-spacing:.18em;font-style:italic}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .brand img{filter:brightness(1.6)}}:root[data-theme="dark"] .brand img{filter:brightness(1.6)}
+header{border-bottom:3px solid var(--brand)!important}
 .mode{font-size:13px;color:var(--muted);margin-left:auto}
 nav{display:flex;gap:4px;overflow-x:auto;padding-top:8px;scrollbar-width:none}
 nav a{font-family:var(--font-display);font-weight:600;font-size:17px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 12px 9px;border-bottom:3px solid transparent;white-space:nowrap}
-nav a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--plate)}
+nav a[aria-current="page"]{color:var(--brand);border-bottom-color:var(--brand)}
 nav a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--plate);outline-offset:2px}
 main{padding-block:20px 48px}
 .bar{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin-bottom:16px}
@@ -38,7 +42,7 @@ h2{font-family:var(--font-display);font-weight:700;font-size:20px;text-transform
 .grow{flex:1;min-width:0}
 a.btn{text-decoration:none;display:inline-flex;align-items:center}
 button,.btn{font:inherit;font-weight:600;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;cursor:pointer}
-button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
 button.danger{color:var(--bad);border-color:var(--bad)}
 button.link{border:0;background:none;padding:4px 6px;color:var(--muted);font-weight:600}
 button.link:hover{color:var(--ink)}
@@ -92,9 +96,9 @@ dialog form{display:flex;flex-direction:column;max-height:calc(100dvh - 34px)}
 .df .left{margin-right:auto}
 td.chk,th.chk{width:34px;padding-right:0}
 td.chk input{width:18px;height:18px;accent-color:var(--ink)}
-.selbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--ink);color:var(--bg);border-radius:8px;padding:10px 14px;margin-bottom:12px}
+.selbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--brand);color:var(--brand-ink);border-radius:8px;padding:10px 14px;margin-bottom:12px}
 .selbar button{background:var(--plate);color:var(--plate-ink);border-color:var(--plate)}
-.selbar .link{color:var(--bg);background:none;border:0}
+.selbar .link{color:var(--brand-ink);background:none;border:0}
 .factno{font-family:var(--font-mono);font-size:12px;font-weight:700}
 .pdflink{font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap}
 .pdflink::before{content:"PDF";font-family:var(--font-body);font-size:10px;letter-spacing:.06em;background:var(--bad);color:#fff;border-radius:3px;padding:1px 4px;margin-right:6px}
@@ -155,7 +159,7 @@ dialog.wide{width:min(860px,calc(100vw - 32px))}
 </style>
 
 <header><div class="wrap">
-  <div class="top"><div class="brand"><i aria-hidden="true"></i>Transporte Carro Viejo</div><div class="mode" id="mode">Cargando datos…</div></div>
+  <div class="top"><div class="brand"><img id="brandJeep" alt=""><span><small>Transporte</small>Carro Viejo</span></div><div class="mode" id="mode">Cargando datos…</div></div>
   <nav id="nav">
     <a href="#resumen">Resumen</a><a href="#viajes">Viajes</a><a href="#vehiculos">Vehículos</a><a href="#conductores">Conductores</a><a href="#gastos">Gastos</a><a href="#facturas">Facturas</a>
   </nav>
@@ -591,5 +595,6 @@ $('#invFoot').addEventListener('click',async e=>{
 });
 estadoCls.Pendiente='warn';estadoCls.Pagada='ok';estadoCls.Anulada='bad';
 
+$('#brandJeep').src=JEEP;
 render();initStore();
 </script>

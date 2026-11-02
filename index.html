@@ -292,10 +292,12 @@ function vResumen(){
   const gs=S.gastos.filter(x=>(x.fecha||'').startsWith(m));
   const fm=S.facturas.filter(f=>(f.fecha||'').startsWith(m)&&f.estado!=='Anulada');
   const facturado=fm.reduce((a,f)=>a+num(f.total),0);
+  const cobrado=fm.filter(f=>f.estado==='Pagada').reduce((a,f)=>a+neto(f),0);
   const porCobrar=S.facturas.filter(f=>f.estado!=='Pagada'&&f.estado!=='Anulada').reduce((a,f)=>a+neto(f),0);
-  // Líneas de factura que no vienen de un viaje: también son ingresos del mes
-  const ingFact=fm.reduce((a,f)=>a+(f.items||[]).filter(i=>!i.viajeId).reduce((b,i)=>b+num(i.valor),0),0);
-  const ing=vj.reduce((a,x)=>a+num(x.valor),0)+ingFact, gas=gs.reduce((a,x)=>a+num(x.valor),0), km=vj.reduce((a,x)=>a+num(x.km),0);
+  // Viajes que ya están en alguna factura vigente: se cuentan por la factura, no dos veces
+  const enFactura=new Set();S.facturas.filter(f=>f.estado!=='Anulada').forEach(f=>(f.items||[]).forEach(i=>{if(i.viajeId)enFactura.add(i.viajeId)}));
+  const vjSin=vj.filter(x=>!enFactura.has(x.id));
+  const ing=facturado+vjSin.reduce((a,x)=>a+num(x.valor),0), gas=gs.reduce((a,x)=>a+num(x.valor),0), km=vj.reduce((a,x)=>a+num(x.km),0);
   const comb=gs.filter(g=>g.tipo==='Combustible'), gal=comb.reduce((a,g)=>a+num(g.galones),0);
   const util=ing-gas;
   const alerts=[];
@@ -303,13 +305,16 @@ function vResumen(){
   S.conductores.forEach(c=>{const n=days(c.licencia);if(n!==null&&n<=30)alerts.push({n,html:`<div><b>Licencia de ${esc(c.nombre)}</b> <span class="muted">· ${fdate(c.licencia)}</span></div>${venc(c.licencia)}`})});
   alerts.sort((a,b)=>a.n-b.n);
   const factVeh=f=>f.vehiculo||(S.vehiculos.length===1?S.vehiculos[0].id:'');
-  const sueltas=f=>(f.items||[]).filter(i=>!i.viajeId).reduce((b,i)=>b+num(i.valor),0);
-  const per=S.vehiculos.map(v=>({v,i:vj.filter(x=>x.vehiculo===v.id).reduce((a,x)=>a+num(x.valor),0)+fm.filter(f=>factVeh(f)===v.id).reduce((a,f)=>a+sueltas(f),0),g:gs.filter(x=>x.vehiculo===v.id).reduce((a,x)=>a+num(x.valor),0)})).filter(r=>r.i||r.g);
-  const sinVeh=fm.filter(f=>!factVeh(f)||!veh(factVeh(f))).reduce((a,f)=>a+sueltas(f),0);
+  const itemVeh=(f,i)=>{const v=i.viajeId&&S.viajes.find(x=>x.id===i.viajeId);return v?v.vehiculo:factVeh(f)};
+  const ingVeh={};const addI=(id,val)=>{ingVeh[id||'']=(ingVeh[id||'']||0)+val};
+  fm.forEach(f=>(f.items||[]).forEach(i=>addI(itemVeh(f,i),num(i.valor))));
+  vjSin.forEach(x=>addI(x.vehiculo,num(x.valor)));
+  const per=S.vehiculos.map(v=>({v,i:ingVeh[v.id]||0,g:gs.filter(x=>x.vehiculo===v.id).reduce((a,x)=>a+num(x.valor),0)})).filter(r=>r.i||r.g);
+  const sinVeh=Object.entries(ingVeh).filter(([id])=>!veh(id)).reduce((a,[,v])=>a+v,0);
   if(sinVeh)per.push({v:null,i:sinVeh,g:0});
   const movs=[
-    ...vj.map(x=>({fecha:x.fecha,tipo:'Viaje',det:`${x.origen||''} → ${x.destino||''}${x.cliente?' · '+x.cliente:''}`,v:veh(x.vehiculo),ing:num(x.valor),gas:0})),
-    ...fm.filter(f=>sueltas(f)).map(f=>({fecha:f.fecha,tipo:'Factura '+numFact(f),det:f.cliente||'',v:veh(factVeh(f)),ing:sueltas(f),gas:0})),
+    ...fm.map(f=>({fecha:f.fecha,tipo:'Factura '+numFact(f),est:f.estado,det:f.cliente||'',v:veh(itemVeh(f,(f.items||[])[0]||{})),ing:num(f.total),gas:0})),
+    ...vjSin.map(x=>({fecha:x.fecha,tipo:'Viaje sin facturar',det:`${x.origen||''} → ${x.destino||''}${x.cliente?' · '+x.cliente:''}`,v:veh(x.vehiculo),ing:num(x.valor),gas:0})),
     ...gs.map(g=>({fecha:g.fecha,tipo:g.tipo||'Gasto',det:g.detalle||'',v:veh(g.vehiculo),ing:0,gas:num(g.valor)}))
   ].sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1);
   const mx=Math.max(1,...per.map(r=>Math.max(r.i,r.g)));
@@ -325,6 +330,7 @@ function vResumen(){
    <div class="kpi"><span>Utilidad</span><b class="${util<0?'neg':'pos'}">${cop.format(util)}</b></div>
    <div class="kpi"><span>Combustible</span><b>${nf.format(Math.round(gal*10)/10)} gal</b></div>
    <div class="kpi"><span>Facturado (${nf.format(fm.length)})</span><b>${cop.format(facturado)}</b></div>
+   <div class="kpi"><span>Cobrado</span><b class="pos">${cop.format(cobrado)}</b></div>
    <div class="kpi"><span>Por cobrar</span><b>${cop.format(porCobrar)}</b></div>
   </div>
   <div class="cols">
@@ -333,7 +339,7 @@ function vResumen(){
   </div>
   <h2 style="margin-top:28px">Movimientos del mes</h2>
   <div class="tbl"><table><thead><tr><th>Fecha</th><th>Movimiento</th><th>Detalle</th><th>Vehículo</th><th class="num">Ingreso</th><th class="num">Gasto</th></tr></thead><tbody>
-  ${movs.length?movs.map(m=>`<tr><td>${fdate(m.fecha)}</td><td>${esc(m.tipo)}</td><td>${esc(m.det||'—')}</td><td>${placa(m.v)}</td><td class="num" style="color:var(--ok)">${m.ing?cop.format(m.ing):''}</td><td class="num" style="color:var(--bad)">${m.gas?cop.format(m.gas):''}</td></tr>`).join('')+`<tr><td colspan="4"><b>Total del mes</b></td><td class="num" style="color:var(--ok)"><b>${cop.format(ing)}</b></td><td class="num" style="color:var(--bad)"><b>${cop.format(gas)}</b></td></tr>`:emptyRow(6,'Sin movimientos este mes','Los viajes, facturas y gastos del mes aparecen aquí.')}
+  ${movs.length?movs.map(m=>`<tr><td>${fdate(m.fecha)}</td><td>${esc(m.tipo)}${m.est?' '+pill(m.est):''}</td><td>${esc(m.det||'—')}</td><td>${placa(m.v)}</td><td class="num" style="color:var(--ok)">${m.ing?cop.format(m.ing):''}</td><td class="num" style="color:var(--bad)">${m.gas?cop.format(m.gas):''}</td></tr>`).join('')+`<tr><td colspan="4"><b>Total del mes</b></td><td class="num" style="color:var(--ok)"><b>${cop.format(ing)}</b></td><td class="num" style="color:var(--bad)"><b>${cop.format(gas)}</b></td></tr>`:emptyRow(6,'Sin movimientos este mes','Los viajes, facturas y gastos del mes aparecen aquí.')}
   </tbody></table></div>
   <h2 style="margin-top:28px">Próximos viajes</h2>
   <div class="tbl"><table><thead><tr><th>Fecha</th><th>Vehículo</th><th>Conductor</th><th>Ruta</th><th>Estado</th></tr></thead><tbody>

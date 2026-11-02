@@ -290,7 +290,12 @@ function vResumen(){
   const m=ui.resumenMes;
   const vj=S.viajes.filter(x=>(x.fecha||'').startsWith(m)&&x.estado!=='Cancelado');
   const gs=S.gastos.filter(x=>(x.fecha||'').startsWith(m));
-  const ing=vj.reduce((a,x)=>a+num(x.valor),0), gas=gs.reduce((a,x)=>a+num(x.valor),0), km=vj.reduce((a,x)=>a+num(x.km),0);
+  const fm=S.facturas.filter(f=>(f.fecha||'').startsWith(m)&&f.estado!=='Anulada');
+  const facturado=fm.reduce((a,f)=>a+num(f.total),0);
+  const porCobrar=S.facturas.filter(f=>f.estado!=='Pagada'&&f.estado!=='Anulada').reduce((a,f)=>a+neto(f),0);
+  // Líneas de factura que no vienen de un viaje: también son ingresos del mes
+  const ingFact=fm.reduce((a,f)=>a+(f.items||[]).filter(i=>!i.viajeId).reduce((b,i)=>b+num(i.valor),0),0);
+  const ing=vj.reduce((a,x)=>a+num(x.valor),0)+ingFact, gas=gs.reduce((a,x)=>a+num(x.valor),0), km=vj.reduce((a,x)=>a+num(x.km),0);
   const comb=gs.filter(g=>g.tipo==='Combustible'), gal=comb.reduce((a,g)=>a+num(g.galones),0);
   const util=ing-gas;
   const alerts=[];
@@ -310,6 +315,8 @@ function vResumen(){
    <div class="kpi"><span>Gastos</span><b>${cop.format(gas)}</b></div>
    <div class="kpi"><span>Utilidad</span><b class="${util<0?'neg':'pos'}">${cop.format(util)}</b></div>
    <div class="kpi"><span>Combustible</span><b>${nf.format(Math.round(gal*10)/10)} gal</b></div>
+   <div class="kpi"><span>Facturado (${nf.format(fm.length)})</span><b>${cop.format(facturado)}</b></div>
+   <div class="kpi"><span>Por cobrar</span><b>${cop.format(porCobrar)}</b></div>
   </div>
   <div class="cols">
    <section class="panel"><h2>Documentos por vencer</h2>${alerts.length?`<ul class="alerts">${alerts.map(a=>`<li class="${a.n<0?'bad':''}">${a.html}</li>`).join('')}</ul>`:`<div class="empty"><b>${isLoading()?'Cargando…':'Todo al día'}</b>${isLoading()?'':'Ningún SOAT, técnico-mecánica o licencia vence en los próximos 30 días.'}</div>`}</section>

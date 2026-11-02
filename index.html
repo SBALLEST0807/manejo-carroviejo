@@ -143,6 +143,7 @@ dialog.wide{width:min(860px,calc(100vw - 32px))}
 .iline .idesc{grid-column:1/-1}
 .ival span{display:block;font-size:13px;font-weight:600;color:var(--muted)}.ival b{display:block;font-family:var(--font-mono);font-size:15px;padding:8px 0}
 @media (max-width:520px){.iline{grid-template-columns:80px minmax(0,1fr)}.iline .ival{grid-column:1/2}}
+.sendbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--brand-soft);border:1px solid var(--brand);border-radius:8px;padding:10px 14px}.sendbar div{flex:1;min-width:200px}
 .inv td.det{white-space:pre-line;height:auto;min-height:27px;line-height:1.3;padding:5px 8px}
 .inv td.c{text-align:center}.inv td.r{text-align:right;font-variant-numeric:tabular-nums}
 .inv .pie{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
@@ -524,7 +525,7 @@ function openFacturar(ids,cliId){
   if(!items.length)items.push({desc:'',cant:1,unit:0,valor:0});
   const e=empresa();
   const c=cliId?S.clientes.find(x=>x.id===cliId):cliByName(vs[0]?.cliente);
-  invCur={draft:{numero:nextNum(),prefijo:e.prefijo||'',tipoDoc:e.tipoDoc||'Factura de venta',fecha:TODAY,cliente:c?c.nombre:(vs[0]?.cliente||''),clienteRef:c?c.id:'',clienteId:c?.documento||'',clienteDir:[c?.direccion,c?.ciudad].filter(Boolean).join(', '),clienteTel:c?.telefono||'',notas:'',items,total:0,retTipo:e.retDef||'Ninguna',retPct:0,retVal:0,estado:'Pendiente'}};
+  invCur={draft:{numero:nextNum(),prefijo:e.prefijo||'',tipoDoc:e.tipoDoc||'Factura de venta',fecha:TODAY,cliente:c?c.nombre:(vs[0]?.cliente||''),clienteRef:c?c.id:'',clienteId:c?.documento||'',clienteDir:[c?.direccion,c?.ciudad].filter(Boolean).join(', '),clienteTel:c?.telefono||'',clienteMail:c?.correo||'',notas:'',items,total:0,retTipo:e.retDef||'Ninguna',retPct:0,retVal:0,estado:'Pendiente'}};
   $('#invTitle').textContent=vs.length?'Facturar '+vs.length+' viaje'+(vs.length>1?'s':''):'Nueva factura';
   const d=invCur.draft;
   $('#invBody').innerHTML=`<div class="igrid">
@@ -532,6 +533,7 @@ function openFacturar(ids,cliId){
    <label for="i_clienteId">C.C. ó NIT<input id="i_clienteId" value="${esc(d.clienteId)}"></label>
    <label for="i_clienteTel">Teléfono<input id="i_clienteTel" value="${esc(d.clienteTel)}"></label>
    <label for="i_clienteDir">Dirección<input id="i_clienteDir" value="${esc(d.clienteDir)}"></label>
+   <label for="i_clienteMail">Correo del cliente<input id="i_clienteMail" type="email" inputmode="email" value="${esc(d.clienteMail)}" placeholder="para enviarle la factura"></label>
    <label for="i_fecha">Fecha<input id="i_fecha" type="date" value="${d.fecha}"></label>
    <label for="i_numero">Número<input id="i_numero" type="number" min="1" value="${d.numero}"></label>
    <label for="i_retTipo">Retención en la fuente<select id="i_retTipo">${Object.keys(RET).map(k=>`<option${k===d.retTipo?' selected':''}>${k}</option>`).join('')}</select></label>
@@ -552,7 +554,7 @@ function drawLines(){
    <label for="i_desc_${k}" class="idesc">Detalle (así sale en la factura)<textarea id="i_desc_${k}" rows="2">${esc(it.desc)}</textarea></label></div>`).join('');
 }
 function readDraft(){
-  const d=invCur.draft;['cliente','clienteId','clienteTel','clienteDir','fecha','notas'].forEach(k=>d[k]=$('#i_'+k).value.trim());
+  const d=invCur.draft;['cliente','clienteId','clienteTel','clienteDir','clienteMail','fecha','notas'].forEach(k=>d[k]=$('#i_'+k).value.trim());
   d.items.forEach((it,k)=>{const t=$('#i_desc_'+k);if(!t)return;it.desc=t.value.trim();it.cant=num($('#i_cant_'+k).value);it.unit=num($('#i_unit_'+k).value);it.valor=Math.round(it.cant*it.unit);const o=$('#i_val_'+k);if(o)o.textContent=cop.format(it.valor)});
   d.total=d.items.reduce((a,i)=>a+num(i.valor),0);if($('#i_retTipo'))d.retTipo=$('#i_retTipo').value;
   {const r=calcRet(d.retTipo,d.total,empresa().uvt);d.retPct=r.pct;d.retVal=r.val;
@@ -563,7 +565,7 @@ function readDraft(){
 $('#invBody').addEventListener('change',e=>{
   if(e.target.id==='i_retTipo'){prev();return}
   if(e.target.id!=='i_cliente')return;const c=cliByName(e.target.value);if(!c)return;
-  $('#i_clienteId').value=c.documento||'';$('#i_clienteTel').value=c.telefono||'';$('#i_clienteDir').value=[c.direccion,c.ciudad].filter(Boolean).join(', ');prev();
+  $('#i_clienteId').value=c.documento||'';$('#i_clienteTel').value=c.telefono||'';$('#i_clienteDir').value=[c.direccion,c.ciudad].filter(Boolean).join(', ');$('#i_clienteMail').value=c.correo||'';prev();
 });
 $('#invBody').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||!invCur?.draft)return;
@@ -579,9 +581,9 @@ $('#invFrm').addEventListener('submit',async e=>{
   d.items=d.items.filter(i=>i.desc||i.valor||i.viajeId);
   if(!d.items.length){toast('Agrega al menos una línea con detalle.');drawLines();return}
   d.total=d.items.reduce((a,i)=>a+num(i.valor),0);{const r=calcRet(d.retTipo,d.total,empresa().uvt);d.retPct=r.pct;d.retVal=r.val}
-  try{const c=cliByName(d.cliente);const dat={nombre:d.cliente,documento:d.clienteId,telefono:d.clienteTel,direccion:d.clienteDir};
-    if(!c){const cid=uid();await save('clientes',cid,{...dat,ciudad:'',correo:'',notas:''});d.clienteRef=cid}
-    else{d.clienteRef=c.id;const{id:cid,...cd}=c;const upd={...cd};let ch=false;for(const k of ['documento','telefono','direccion'])if(!cd[k]&&dat[k]){upd[k]=dat[k];ch=true}if(ch)await save('clientes',cid,upd)}
+  try{const c=cliByName(d.cliente);const dat={nombre:d.cliente,documento:d.clienteId,telefono:d.clienteTel,direccion:d.clienteDir,correo:d.clienteMail};
+    if(!c){const cid=uid();await save('clientes',cid,{...dat,ciudad:'',notas:''});d.clienteRef=cid}
+    else{d.clienteRef=c.id;const{id:cid,...cd}=c;const upd={...cd};let ch=false;for(const k of ['documento','telefono','direccion','correo'])if(!cd[k]&&dat[k]){upd[k]=dat[k];ch=true}if(ch)await save('clientes',cid,upd)}
   }catch(err){}
   if(S.facturas.some(f=>num(f.numero)===d.numero&&(f.prefijo||'')===d.prefijo)){toast('Ya existe la factura número '+d.numero+'.');return}
   const id=uid();const{id:_e,...emp}=empresa();const rec={...d,empresa:emp};
@@ -589,7 +591,7 @@ $('#invFrm').addEventListener('submit',async e=>{
     await save('facturas',id,rec);
     for(const it of d.items){const v=S.viajes.find(x=>x.id===it.viajeId);if(v){const{id:vid,...vd}=v;await save('viajes',vid,{...vd,factura:id,cliente:vd.cliente||d.cliente})}}
     d.items.forEach(i=>ui.sel.delete(i.viajeId));
-    toast('Factura '+numFact(d)+' guardada · generando PDF…');showFactura({...rec,id});render();
+    toast('Factura '+numFact(d)+' guardada · generando PDF…');showFactura({...rec,id},true);render();
     archivarPdf({...rec,id});
   }catch(err){toast(errMsg(err))}
 });
@@ -635,15 +637,48 @@ async function setEstado(id,est){const f=S.facturas.find(x=>x.id===id);if(!f)ret
   try{await save('facturas',fid,{...d,estado:est});toast(est==='Pagada'?'Factura marcada como pagada':'Factura devuelta a pendiente');if(invDlg.open&&invCur?.view?.id===fid)showFactura({...d,estado:est,id:fid})}catch(err){toast(errMsg(err))}}
 function verFactura(id){const f=S.facturas.find(x=>x.id===id);if(f)showFactura(f)}
 let dlCap;
-async function showFactura(f){
-  invCur={view:f};
+async function showFactura(f,nueva){
+  const keep=invCur&&invCur.view&&invCur.view.id===f.id?invCur:null;
+  invCur={view:f,pdfP:keep?keep.pdfP:null,nueva:nueva||(keep&&keep.nueva)};nueva=invCur.nueva;
   $('#invTitle').textContent=(f.tipoDoc||'Factura')+' '+numFact(f);
-  $('#invBody').innerHTML=`<div class="paper">${invoiceHTML(f)}</div>`;
+  $('#invBody').innerHTML=`${nueva&&f.estado!=='Anulada'?`<div class="sendbar"><div><b>Factura guardada.</b> Envíasela a ${esc(f.cliente)}${f.clienteMail?` (${esc(f.clienteMail)})`:''} con un saludo listo.</div><button type="button" class="primary" data-enviar="1">Enviar por correo</button></div>`:''}<div class="paper">${invoiceHTML(f)}</div>`;
+  if(f.estado!=='Anulada'&&!invCur.pdfP){invCur.pdfP=pdfBlob(f).catch(()=>null)}
   if(dlCap===undefined){try{dlCap=window.claude&&window.claude.use?await window.claude.use('downloads'):null}catch(e){dlCap=null}}
   const inClaude=mode==='db';
-  $('#invFoot').innerHTML=`${f.estado!=='Anulada'?`<button type="button" class="danger left" data-anular="1">Anular</button>`:''}${f.estado==='Pendiente'?`<button type="button" data-estado="Pagada">Marcar pagada</button>`:f.estado==='Pagada'?`<button type="button" data-estado="Pendiente">Volver a pendiente</button>`:''}<button type="button" data-cerrar="1">Cerrar</button>${!inClaude?`<button type="button" data-imprimir="1">Imprimir</button>`:''}${f.pdfUrl?`<a class="btn" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">Abrir PDF</a>`:inClaude?`<button type="button" data-archivar="1">Guardar PDF en archivo</button>`:''}${dlCap?`<button type="button" class="primary" data-descargar="1">Descargar PDF</button>`:''}`;
+  $('#invFoot').innerHTML=`${f.estado!=='Anulada'?`<button type="button" class="danger left" data-anular="1">Anular</button>`:''}${f.estado!=='Anulada'?`<button type="button" data-enviar="1">Enviar por correo</button>`:''}${f.estado==='Pendiente'?`<button type="button" data-estado="Pagada">Marcar pagada</button>`:f.estado==='Pagada'?`<button type="button" data-estado="Pendiente">Volver a pendiente</button>`:''}<button type="button" data-cerrar="1">Cerrar</button>${!inClaude?`<button type="button" data-imprimir="1">Imprimir</button>`:''}${f.pdfUrl?`<a class="btn" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">Abrir PDF</a>`:inClaude?`<button type="button" data-archivar="1">Guardar PDF en archivo</button>`:''}${dlCap?`<button type="button" class="primary" data-descargar="1">Descargar PDF</button>`:''}`;
   if(!invDlg.open)invDlg.showModal();
 }
+/* ---------- Enviar factura por correo ---------- */
+function saludo(){const h=new Date().getHours();return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches'}
+function correoFactura(f){
+  const e={...EMP_DEF,...(f.empresa||empresa())};const tipo=f.tipoDoc||e.tipoDoc||'Factura de venta';
+  const asunto=`${tipo} N.º ${numFact(f)} - ${e.nombre||'Transporte Carro Viejo'}`;
+  const det=(f.items||[]).length===1&&f.items[0].desc?String(f.items[0].desc).split('\n')[0]:'los servicios de transporte prestados';
+  const cuerpo=[`${saludo()}, ${f.cliente}.`,'',
+    `Adjunto la ${tipo.toLowerCase()} N.º ${numFact(f)} del ${fdate(f.fecha)}, por valor de ${cop.format(num(f.total))}, correspondiente a ${det.charAt(0).toLowerCase()+det.slice(1)}.`,
+    ...(num(f.retVal)?['',`Con la retención en la fuente del ${String(f.retPct).replace('.',',')}% (${cop.format(num(f.retVal))}), el valor neto a pagar es ${cop.format(neto(f))}.`]:[]),
+    ...(e.pago?['',`Puede realizar el pago a: ${e.pago}.`]:[]),
+    '','Quedo atento a cualquier inquietud.','','Cordialmente,','',e.propietario||'',e.nombre||'Transporte Carro Viejo',e.nit?'Nit. '+e.nit:'',[e.telefono,e.correo].filter(Boolean).join(' · ')].filter((l,i,a)=>l!==''||a[i-1]!=='').join('\n').trim();
+  return{asunto,cuerpo,para:f.clienteMail||(S.clientes.find(c=>c.id===f.clienteRef)||{}).correo||''};
+}
+function abrirCorreo(m){const a=document.createElement('a');a.href=`mailto:${encodeURIComponent(m.para)}?subject=${encodeURIComponent(m.asunto)}&body=${encodeURIComponent(m.cuerpo)}`;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove()}
+async function enviarFactura(btn){
+  const f=invCur.view;const m=correoFactura(f);
+  const t=btn.textContent;btn.disabled=true;btn.textContent='Preparando…';
+  try{
+    const blob=await(invCur.pdfP||pdfBlob(f));
+    const file=blob?new File([blob],pdfName(f),{type:'application/pdf'}):null;
+    // En el celular: abre el menú de compartir con el PDF adjunto (Gmail, Outlook, WhatsApp…)
+    if(file&&navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],title:m.asunto,text:m.cuerpo});toast('Listo para enviar');return}
+      catch(err){if(err&&err.name==='AbortError')return}
+    }
+    // Si no se puede adjuntar directo: descarga el PDF y abre el correo con el mensaje listo
+    if(file&&dlCap){try{await dlCap.save({filename:pdfName(f),data:blob})}catch(err){if(err&&err.code==='declined')return}}
+    abrirCorreo(m);toast(file?'Se abrió tu correo: adjunta el PDF que se descargó':'Se abrió tu correo con el mensaje listo');
+  }finally{btn.disabled=false;btn.textContent=t}
+}
+$('#inv').addEventListener('click',e=>{const b=e.target.closest('[data-enviar]');if(b&&invCur?.view)enviarFactura(b)});
 let anularArmed=false;
 $('#invFoot').addEventListener('click',async e=>{
   const b=e.target.closest('button');if(!b)return;

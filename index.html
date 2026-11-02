@@ -155,6 +155,7 @@ dialog.wide{width:min(860px,calc(100vw - 32px))}
 .inv .tots b{font-family:"Archivo Narrow",Impact,sans-serif;font-weight:700;font-size:19px;letter-spacing:.01em}
 .inv .tots b::after{content:" ➤";font-size:15px}
 .inv .tots span{color:#16181b;font-family:"JetBrains Mono",monospace;font-weight:700;font-size:15px}
+.inv .tots .ret{padding:5px 10px;background:#eef7f1}.inv .tots .ret em{font-style:normal;font-weight:700;font-size:12.5px}.inv .tots .ret span{font-size:13px}
 .inv .nota{margin-top:6px;font-size:11.5px;color:#16181b}
 .inv .anul{position:relative}.inv .anul::after{content:"ANULADA";position:absolute;inset:40% 0 auto;text-align:center;font:700 72px Bungee,Impact,sans-serif;color:rgba(208,32,42,.28);transform:rotate(-18deg);pointer-events:none}
 #printArea{display:none}
@@ -210,7 +211,7 @@ const SCHEMA={
     {k:'nombre',l:'Nombre o razón social',req:1,full:1,def:()=>'Transporte Carro Viejo'},{k:'nit',l:'NIT o cédula',def:()=>'92.226463'},{k:'propietario',l:'Propietario',def:()=>'Fulbio Oyola'},{k:'telefono',l:'Celular'},
     {k:'direccion',l:'Dirección'},{k:'ciudad',l:'Ciudad',ph:'Caucasia, Antioquia'},{k:'correo',l:'Correo'},
     {k:'tipoDoc',l:'Tipo de documento',t:'select',o:['Factura de venta','Cuenta de cobro']},{k:'prefijo',l:'Prefijo del número'},
-    {k:'inicio',l:'Primer número',t:'number',def:()=>144},{k:'pago',l:'Cuenta para pagos',ph:'Bancolombia ahorros 000-000000-00',full:1},
+    {k:'inicio',l:'Primer número',t:'number',def:()=>144},{k:'retDef',l:'Retención en la fuente por defecto',t:'select',o:['Ninguna','Transporte de carga 1%','Transporte de pasajeros 3,5%']},{k:'uvt',l:'Valor UVT del año',t:'number',def:()=>52374},{k:'pago',l:'Cuenta para pagos',ph:'Bancolombia ahorros 000-000000-00',full:1},
     {k:'pie',l:'Texto al pie',t:'textarea',full:1,ph:'No responsable de IVA.'}]},
   vehiculos:{one:'vehículo',fields:[
     {k:'placa',l:'Placa',req:1,ph:'ABC123'},{k:'ciudad',l:'Ciudad de matrícula',ph:'Medellín'},
@@ -356,14 +357,14 @@ function vGastos(){
 }
 function vFacturas(){
   const rows=[...S.facturas].sort((a,b)=>num(b.numero)-num(a.numero));
-  const pend=rows.filter(f=>f.estado!=='Pagada'&&f.estado!=='Anulada').reduce((a,f)=>a+num(f.total),0);
+  const pend=rows.filter(f=>f.estado!=='Pagada'&&f.estado!=='Anulada').reduce((a,f)=>a+neto(f),0);
   const e=empresa();
   const npdf=rows.filter(f=>f.pdfUrl).length;
   return`<div class="bar"><div class="grow"><h1>Facturas</h1><p class="sub">${rows.length} documentos · ${cop.format(pend)} por cobrar · ${npdf} PDF guardados en el archivo</p></div>
   <button data-empresa="1">Datos de la empresa</button><button data-gotoviajes="1">Facturar viajes</button><button class="primary" data-nuevafact="1">+ Nueva factura</button></div>
   ${e.nit?'':`<div class="note">Completa los <b>datos de la empresa</b> (NIT, celular, cuenta para pagos) para que salgan en tus facturas.</div>`}
   <div class="tbl"><table><thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th class="num">Viajes</th><th class="num">Total</th><th>Estado</th><th>PDF</th><th></th></tr></thead><tbody>
-  ${rows.length?rows.map(f=>`<tr><td class="factno">${esc(numFact(f))}</td><td>${fdate(f.fecha)}</td><td>${esc(f.cliente)}${f.clienteId?` <span class="muted">· ${esc(f.clienteId)}</span>`:''}</td><td class="num">${(f.items||[]).length}</td><td class="num">${cop.format(num(f.total))}</td><td>${pill(f.estado)}</td><td>${f.pdfUrl?`<a class="pdflink" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">${esc(pdfName(f))}</a>`:`<button class="link" data-genpdf="${f.id}">Guardar PDF</button>`}</td><td class="act"><button class="link" data-verfact="${f.id}">Ver</button>${f.estado==='Pendiente'?`<button class="link" data-pagar="${f.id}">Marcar pagada</button>`:''}</td></tr>`).join(''):emptyRow(8,'Aún no hay facturas','En la pestaña Viajes marca uno o varios viajes y pulsa “Facturar”.')}
+  ${rows.length?rows.map(f=>`<tr><td class="factno">${esc(numFact(f))}</td><td>${fdate(f.fecha)}</td><td>${esc(f.cliente)}${f.clienteId?` <span class="muted">· ${esc(f.clienteId)}</span>`:''}</td><td class="num">${(f.items||[]).length}</td><td class="num">${cop.format(num(f.total))}${num(f.retVal)?`<br><span class="muted" style="font-size:12px">Recibes ${cop.format(neto(f))}</span>`:''}</td><td>${pill(f.estado)}</td><td>${f.pdfUrl?`<a class="pdflink" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">${esc(pdfName(f))}</a>`:`<button class="link" data-genpdf="${f.id}">Guardar PDF</button>`}</td><td class="act"><button class="link" data-verfact="${f.id}">Ver</button>${f.estado==='Pendiente'?`<button class="link" data-pagar="${f.id}">Marcar pagada</button>`:''}</td></tr>`).join(''):emptyRow(8,'Aún no hay facturas','En la pestaña Viajes marca uno o varios viajes y pulsa “Facturar”.')}
   </tbody></table></div>`;
 }
 function vClientes(){
@@ -461,8 +462,12 @@ function errMsg(e){if(e&&e.code==='invalid_argument')return'No tienes permiso pa
 let tt;function toast(m){document.querySelector('.toast')?.remove();const d=document.createElement('div');d.className='toast';d.setAttribute('role','status');d.textContent=m;document.body.appendChild(d);clearTimeout(tt);tt=setTimeout(()=>d.remove(),2600)}
 
 /* ---------- Facturación ---------- */
-const EMP_DEF={nombre:'Transporte Carro Viejo',nit:'92.226463',propietario:'Fulbio Oyola',tipoDoc:'Factura de venta',inicio:144,prefijo:''};
+const EMP_DEF={retDef:'Ninguna',uvt:52374,nombre:'Transporte Carro Viejo',nit:'92.226463',propietario:'Fulbio Oyola',tipoDoc:'Factura de venta',inicio:144,prefijo:''};
 const empresa=()=>({...EMP_DEF,...(S.config.find(x=>x.id==='empresa')||{})});
+// Retención en la fuente (Colombia): carga 1% desde 2 UVT, pasajeros 3,5% desde 10 UVT.
+const RET={'Ninguna':{pct:0,uvt:0},'Transporte de carga 1%':{pct:1,uvt:2},'Transporte de pasajeros 3,5%':{pct:3.5,uvt:10}};
+function calcRet(tipo,total,uvt){const r=RET[tipo]||RET['Ninguna'];const base=Math.round(r.uvt*(num(uvt)||52374));if(!r.pct)return{pct:0,val:0,base,aplica:false};const aplica=total>=base;return{pct:r.pct,val:aplica?Math.round(total*r.pct/100):0,base,aplica}}
+const neto=f=>num(f.total)-num(f.retVal);
 const factOf=v=>v.factura?S.facturas.find(f=>f.id===v.factura&&f.estado!=='Anulada'):null;
 const numFact=f=>(f.prefijo||'')+String(f.numero).padStart(4,'0');
 function nextNum(){const e=empresa();const used=S.facturas.map(f=>num(f.numero));return Math.max(num(e.inicio)||1,used.length?Math.max(...used)+1:0)}
@@ -503,7 +508,7 @@ function invoiceHTML(f){
    <thead><tr><th>Cant.</th><th>Detalle</th><th>Vr. Unit.</th><th>Valor Total</th></tr></thead><tbody>${filas.join('')}</tbody></table></div>
   <div class="pie"><div class="leg"><div>La presente Factura de Venta se asimila para todos sus efectos a una letra de Cambio. (Art. 774 de la Cámara de Comercio).</div>
     <div class="rc">Recibí Conforme <u></u><br><span style="margin-left:52px">C.C.</span></div></div>
-   <div class="tots"><div><b>SUB-TOTAL</b><span>${cop.format(num(f.total))}</span></div><div><b>TOTAL</b><span>${cop.format(num(f.total))}</span></div></div></div>
+   <div class="tots"><div><b>SUB-TOTAL</b><span>${cop.format(num(f.total))}</span></div><div><b>TOTAL</b><span>${cop.format(num(f.total))}</span></div>${num(f.retVal)?`<div class="ret"><em>Retención en la fuente ${String(f.retPct).replace('.',',')}%</em><span>− ${cop.format(num(f.retVal))}</span></div><div class="ret"><em>Neto a recibir</em><span>${cop.format(neto(f))}</span></div>`:''}</div></div>
   ${f.notas?`<div class="nota">Nota: ${esc(f.notas)}</div>`:''}
   </div>`;
 }
@@ -518,7 +523,7 @@ function openFacturar(ids,cliId){
   if(!items.length)items.push({desc:'',cant:1,unit:0,valor:0});
   const e=empresa();
   const c=cliId?S.clientes.find(x=>x.id===cliId):cliByName(vs[0]?.cliente);
-  invCur={draft:{numero:nextNum(),prefijo:e.prefijo||'',tipoDoc:e.tipoDoc||'Factura de venta',fecha:TODAY,cliente:c?c.nombre:(vs[0]?.cliente||''),clienteRef:c?c.id:'',clienteId:c?.documento||'',clienteDir:[c?.direccion,c?.ciudad].filter(Boolean).join(', '),clienteTel:c?.telefono||'',notas:'',items,total:0,estado:'Pendiente'}};
+  invCur={draft:{numero:nextNum(),prefijo:e.prefijo||'',tipoDoc:e.tipoDoc||'Factura de venta',fecha:TODAY,cliente:c?c.nombre:(vs[0]?.cliente||''),clienteRef:c?c.id:'',clienteId:c?.documento||'',clienteDir:[c?.direccion,c?.ciudad].filter(Boolean).join(', '),clienteTel:c?.telefono||'',notas:'',items,total:0,retTipo:e.retDef||'Ninguna',retPct:0,retVal:0,estado:'Pendiente'}};
   $('#invTitle').textContent=vs.length?'Facturar '+vs.length+' viaje'+(vs.length>1?'s':''):'Nueva factura';
   const d=invCur.draft;
   $('#invBody').innerHTML=`<div class="igrid">
@@ -528,9 +533,10 @@ function openFacturar(ids,cliId){
    <label for="i_clienteDir">Dirección<input id="i_clienteDir" value="${esc(d.clienteDir)}"></label>
    <label for="i_fecha">Fecha<input id="i_fecha" type="date" value="${d.fecha}"></label>
    <label for="i_numero">Número<input id="i_numero" type="number" min="1" value="${d.numero}"></label>
-   <label for="i_notas" style="grid-column:1/-1">Nota (opcional)<input id="i_notas" placeholder="Ej.: pago a 15 días"></label></div>
+   <label for="i_retTipo">Retención en la fuente<select id="i_retTipo">${Object.keys(RET).map(k=>`<option${k===d.retTipo?' selected':''}>${k}</option>`).join('')}</select></label>
+   <label for="i_notas" style="grid-column:span 2">Nota (opcional)<input id="i_notas" placeholder="Ej.: pago a 15 días"></label></div>
    <div><h2 style="margin:4px 0 8px">Detalle de la factura</h2><div id="iLines"></div>
-   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px"><button type="button" data-addline="1">+ Agregar línea</button><b id="iTotal" style="font-family:var(--font-mono)"></b></div></div>
+   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px"><button type="button" data-addline="1">+ Agregar línea</button><div id="iTotal" style="font-family:var(--font-mono);text-align:right;font-size:14px"></div></div></div>
    <div class="paper" id="invPrev"></div>`;
   $('#invFoot').innerHTML=`<button type="button" class="left" data-empresa2="1">Datos de la empresa</button><button type="button" data-cerrar="1">Cancelar</button><button type="submit" class="primary">Guardar factura</button>`;
   drawLines();prev();invDlg.showModal();
@@ -547,11 +553,14 @@ function drawLines(){
 function readDraft(){
   const d=invCur.draft;['cliente','clienteId','clienteTel','clienteDir','fecha','notas'].forEach(k=>d[k]=$('#i_'+k).value.trim());
   d.items.forEach((it,k)=>{const t=$('#i_desc_'+k);if(!t)return;it.desc=t.value.trim();it.cant=num($('#i_cant_'+k).value);it.unit=num($('#i_unit_'+k).value);it.valor=Math.round(it.cant*it.unit);const o=$('#i_val_'+k);if(o)o.textContent=cop.format(it.valor)});
-  d.total=d.items.reduce((a,i)=>a+num(i.valor),0);if($('#iTotal'))$('#iTotal').textContent='Total '+cop.format(d.total);
+  d.total=d.items.reduce((a,i)=>a+num(i.valor),0);if($('#i_retTipo'))d.retTipo=$('#i_retTipo').value;
+  {const r=calcRet(d.retTipo,d.total,empresa().uvt);d.retPct=r.pct;d.retVal=r.val;
+  if($('#iTotal'))$('#iTotal').innerHTML=`<b>Total ${cop.format(d.total)}</b>`+(r.pct?(r.aplica?`<br>Retención ${String(r.pct).replace('.',',')}%: −${cop.format(r.val)}<br><b>Recibes ${cop.format(d.total-r.val)}</b>`:`<br><span class="muted">Sin retención: el total no llega a ${cop.format(r.base)}</span>`):'')}
   const c=cliByName(d.cliente);d.clienteRef=c?c.id:'';
   d.numero=num($('#i_numero').value)||d.numero;return d}
 // Al elegir un cliente registrado, llena sus datos
 $('#invBody').addEventListener('change',e=>{
+  if(e.target.id==='i_retTipo'){prev();return}
   if(e.target.id!=='i_cliente')return;const c=cliByName(e.target.value);if(!c)return;
   $('#i_clienteId').value=c.documento||'';$('#i_clienteTel').value=c.telefono||'';$('#i_clienteDir').value=[c.direccion,c.ciudad].filter(Boolean).join(', ');prev();
 });
@@ -568,7 +577,7 @@ $('#invFrm').addEventListener('submit',async e=>{
   if(!d.cliente){$('#i_cliente').focus();toast('Escribe el nombre del cliente.');return}
   d.items=d.items.filter(i=>i.desc||i.valor||i.viajeId);
   if(!d.items.length){toast('Agrega al menos una línea con detalle.');drawLines();return}
-  d.total=d.items.reduce((a,i)=>a+num(i.valor),0);
+  d.total=d.items.reduce((a,i)=>a+num(i.valor),0);{const r=calcRet(d.retTipo,d.total,empresa().uvt);d.retPct=r.pct;d.retVal=r.val}
   try{const c=cliByName(d.cliente);const dat={nombre:d.cliente,documento:d.clienteId,telefono:d.clienteTel,direccion:d.clienteDir};
     if(!c){const cid=uid();await save('clientes',cid,{...dat,ciudad:'',correo:'',notas:''});d.clienteRef=cid}
     else{d.clienteRef=c.id;const{id:cid,...cd}=c;const upd={...cd};let ch=false;for(const k of ['documento','telefono','direccion'])if(!cd[k]&&dat[k]){upd[k]=dat[k];ch=true}if(ch)await save('clientes',cid,upd)}

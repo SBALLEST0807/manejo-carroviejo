@@ -36,6 +36,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:32px;line-height:1.
 h2{font-family:var(--font-display);font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px}
 .sub{color:var(--muted);margin:2px 0 0}
 .grow{flex:1;min-width:0}
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
 button,.btn{font:inherit;font-weight:600;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;cursor:pointer}
 button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 button.danger{color:var(--bad);border-color:var(--bad)}
@@ -95,6 +96,10 @@ td.chk input{width:18px;height:18px;accent-color:var(--ink)}
 .selbar button{background:var(--plate);color:var(--plate-ink);border-color:var(--plate)}
 .selbar .link{color:var(--bg);background:none;border:0}
 .factno{font-family:var(--font-mono);font-size:12px;font-weight:700}
+.pdflink{font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap}
+.pdflink::before{content:"PDF";font-family:var(--font-body);font-size:10px;letter-spacing:.06em;background:var(--bad);color:#fff;border-radius:3px;padding:1px 4px;margin-right:6px}
+#pdfStage{position:fixed;left:-10000px;top:0;width:780px;background:#fff}
+#pdfStage .inv{min-width:0}
 dialog.wide{width:min(860px,calc(100vw - 32px))}
 .ib{padding:16px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
 .igrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
@@ -312,11 +317,12 @@ function vFacturas(){
   const rows=[...S.facturas].sort((a,b)=>num(b.numero)-num(a.numero));
   const pend=rows.filter(f=>f.estado!=='Pagada'&&f.estado!=='Anulada').reduce((a,f)=>a+num(f.total),0);
   const e=empresa();
-  return`<div class="bar"><div class="grow"><h1>Facturas</h1><p class="sub">${rows.length} documentos · ${cop.format(pend)} por cobrar</p></div>
+  const npdf=rows.filter(f=>f.pdfUrl).length;
+  return`<div class="bar"><div class="grow"><h1>Facturas</h1><p class="sub">${rows.length} documentos · ${cop.format(pend)} por cobrar · ${npdf} PDF guardados en el archivo</p></div>
   <button data-empresa="1">Datos de la empresa</button><button class="primary" data-gotoviajes="1">+ Facturar viajes</button></div>
   ${e.nit?'':`<div class="note">Completa los <b>datos de la empresa</b> (NIT, celular, cuenta para pagos) para que salgan en tus facturas.</div>`}
-  <div class="tbl"><table><thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th class="num">Viajes</th><th class="num">Total</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${rows.length?rows.map(f=>`<tr><td class="factno">${esc(numFact(f))}</td><td>${fdate(f.fecha)}</td><td>${esc(f.cliente)}${f.clienteId?` <span class="muted">· ${esc(f.clienteId)}</span>`:''}</td><td class="num">${(f.items||[]).length}</td><td class="num">${cop.format(num(f.total))}</td><td>${pill(f.estado)}</td><td class="act"><button class="link" data-verfact="${f.id}">Ver e imprimir</button>${f.estado==='Pendiente'?`<button class="link" data-pagar="${f.id}">Marcar pagada</button>`:''}</td></tr>`).join(''):emptyRow(7,'Aún no hay facturas','En la pestaña Viajes marca uno o varios viajes y pulsa “Facturar”.')}
+  <div class="tbl"><table><thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th class="num">Viajes</th><th class="num">Total</th><th>Estado</th><th>PDF</th><th></th></tr></thead><tbody>
+  ${rows.length?rows.map(f=>`<tr><td class="factno">${esc(numFact(f))}</td><td>${fdate(f.fecha)}</td><td>${esc(f.cliente)}${f.clienteId?` <span class="muted">· ${esc(f.clienteId)}</span>`:''}</td><td class="num">${(f.items||[]).length}</td><td class="num">${cop.format(num(f.total))}</td><td>${pill(f.estado)}</td><td>${f.pdfUrl?`<a class="pdflink" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">${esc(pdfName(f))}</a>`:`<button class="link" data-genpdf="${f.id}">Guardar PDF</button>`}</td><td class="act"><button class="link" data-verfact="${f.id}">Ver</button>${f.estado==='Pendiente'?`<button class="link" data-pagar="${f.id}">Marcar pagada</button>`:''}</td></tr>`).join(''):emptyRow(8,'Aún no hay facturas','En la pestaña Viajes marca uno o varios viajes y pulsa “Facturar”.')}
   </tbody></table></div>`;
 }
 const VIEWS={resumen:vResumen,viajes:vViajes,vehiculos:vVehiculos,conductores:vConductores,gastos:vGastos,facturas:vFacturas};
@@ -346,6 +352,7 @@ $('#main').addEventListener('click',e=>{
   if(b.dataset.verfact)verFactura(b.dataset.verfact);
   if(b.dataset.empresa)openForm('config','empresa');
   if(b.dataset.gotoviajes)location.hash='viajes';
+  if(b.dataset.genpdf){const f=S.facturas.find(x=>x.id===b.dataset.genpdf);if(f){b.disabled=true;b.textContent='Generando…';archivarPdf(f).then(ok=>{if(!ok){b.disabled=false;b.textContent='Guardar PDF'}})}}
   if(b.dataset.pagar){const f=S.facturas.find(x=>x.id===b.dataset.pagar);if(f){const{id,...d}=f;save('facturas',id,{...d,estado:'Pagada'}).then(()=>toast('Factura marcada como pagada'),err=>toast(errMsg(err)))}}
 });
 
@@ -467,9 +474,48 @@ $('#invFrm').addEventListener('submit',async e=>{
     await save('facturas',id,rec);
     for(const it of d.items){const v=S.viajes.find(x=>x.id===it.viajeId);if(v){const{id:vid,...vd}=v;await save('viajes',vid,{...vd,factura:id,cliente:vd.cliente||d.cliente})}}
     d.items.forEach(i=>ui.sel.delete(i.viajeId));
-    toast('Factura '+numFact(d)+' guardada');showFactura({...rec,id});render();
+    toast('Factura '+numFact(d)+' guardada · generando PDF…');showFactura({...rec,id});render();
+    archivarPdf({...rec,id});
   }catch(err){toast(errMsg(err))}
 });
+
+/* ---------- PDF: generar y guardar en el archivo ---------- */
+const pdfName=f=>`${(f.tipoDoc||'Factura').replace(/\s+/g,'-')}-${numFact(f)}.pdf`;
+let pdfLib=null;
+function loadPdfLib(){
+  if(window.html2pdf)return Promise.resolve(window.html2pdf);
+  if(!pdfLib)pdfLib=new Promise((ok,ko)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';s.onload=()=>ok(window.html2pdf);s.onerror=()=>{pdfLib=null;ko(new Error('pdf'))};document.head.appendChild(s)});
+  return pdfLib;
+}
+async function makePdf(f){
+  const h2p=await loadPdfLib();
+  try{await document.fonts.ready}catch(e){}
+  const st=document.createElement('div');st.id='pdfStage';st.innerHTML=invoiceHTML(f);document.body.appendChild(st);
+  try{
+    return await h2p().set({margin:[12,12,12,12],filename:pdfName(f),image:{type:'jpeg',quality:.95},html2canvas:{scale:2,backgroundColor:'#ffffff',useCORS:true},jsPDF:{unit:'mm',format:'letter',orientation:'portrait'},pagebreak:{mode:['css','legacy']}}).from(st.firstElementChild).outputPdf('blob');
+  }finally{st.remove()}
+}
+let assetsCap;
+async function getAssets(){if(assetsCap===undefined){try{assetsCap=window.claude&&window.claude.use?await window.claude.use('assets'):null}catch(e){assetsCap=null}}return assetsCap}
+// Genera el PDF de la factura y lo guarda en el archivo de la app (queda enlazado a la factura).
+async function archivarPdf(f){
+  let blob;
+  try{blob=await makePdf(f)}catch(e){toast('No se pudo generar el PDF. Revisa tu conexión.');return false}
+  const as=await getAssets();
+  if(!as||mode!=='db'){toast('PDF generado. Para guardarlo en el archivo abre la app desde tu cuenta de Claude.');return false}
+  try{
+    const r=await as.upload(new File([blob],pdfName(f),{type:'application/pdf'}));
+    const cur=S.facturas.find(x=>x.id===f.id)||f;const{id,...d}=cur;
+    await save('facturas',id,{...d,pdfId:r.id,pdfUrl:r.url,pdfAt:new Date().toISOString()});
+    toast('PDF '+pdfName(f)+' guardado en el archivo');
+    if(invDlg.open&&invCur&&invCur.view&&invCur.view.id===id)showFactura({...d,id,pdfId:r.id,pdfUrl:r.url});
+    return true;
+  }catch(e){toast('No se pudo guardar el PDF en el archivo.');return false}
+}
+async function pdfBlob(f){
+  if(f.pdfUrl){try{const r=await fetch(f.pdfUrl);if(r.ok)return await r.blob()}catch(e){}}
+  return makePdf(f);
+}
 function verFactura(id){const f=S.facturas.find(x=>x.id===id);if(f)showFactura(f)}
 let dlCap;
 async function showFactura(f){
@@ -478,7 +524,7 @@ async function showFactura(f){
   $('#invBody').innerHTML=`<div class="paper">${invoiceHTML(f)}</div>`;
   if(dlCap===undefined){try{dlCap=window.claude&&window.claude.use?await window.claude.use('downloads'):null}catch(e){dlCap=null}}
   const inClaude=mode==='db';
-  $('#invFoot').innerHTML=`${f.estado!=='Anulada'?`<button type="button" class="danger left" data-anular="1">Anular</button>`:''}<button type="button" data-cerrar="1">Cerrar</button>${!inClaude?`<button type="button" class="primary" data-imprimir="1">Imprimir</button>`:''}${dlCap?`<button type="button" class="primary" data-descargar="1">Descargar para imprimir</button>`:''}`;
+  $('#invFoot').innerHTML=`${f.estado!=='Anulada'?`<button type="button" class="danger left" data-anular="1">Anular</button>`:''}<button type="button" data-cerrar="1">Cerrar</button>${!inClaude?`<button type="button" data-imprimir="1">Imprimir</button>`:''}${f.pdfUrl?`<a class="btn" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">Abrir PDF</a>`:inClaude?`<button type="button" data-archivar="1">Guardar PDF en archivo</button>`:''}${dlCap?`<button type="button" class="primary" data-descargar="1">Descargar PDF</button>`:''}`;
   if(!invDlg.open)invDlg.showModal();
 }
 let anularArmed=false;
@@ -487,12 +533,12 @@ $('#invFoot').addEventListener('click',async e=>{
   if(b.dataset.cerrar){invDlg.close();invCur=null}
   if(b.dataset.empresa2){invDlg.close();openForm('config','empresa')}
   if(b.dataset.imprimir){$('#printArea').innerHTML=invoiceHTML(invCur.view);window.print()}
+  if(b.dataset.archivar){b.disabled=true;b.textContent='Generando…';if(!await archivarPdf(invCur.view)){b.disabled=false;b.textContent='Guardar PDF en archivo'}}
   if(b.dataset.descargar){
-    const f=invCur.view;
-    const css=[...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');
-    const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc((f.tipoDoc||'Factura')+' '+numFact(f))}</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap"><style>${css}\nbody{background:#fff;margin:0;padding:24px}.inv{min-width:0;max-width:800px;margin:0 auto}@media print{body{padding:0}}</style></head><body>${invoiceHTML(f)}<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script></body></html>`;
-    try{await dlCap.save({filename:`${(f.tipoDoc||'Factura').replace(/\s+/g,'-')}-${numFact(f)}.html`,data:html});toast('Ábrelo y se mostrará la ventana de impresión')}
-    catch(err){if(err&&err.code!=='declined')toast('No se pudo descargar el archivo.')}
+    const f=invCur.view;b.disabled=true;const t=b.textContent;b.textContent='Preparando PDF…';
+    try{const blob=await pdfBlob(f);await dlCap.save({filename:pdfName(f),data:blob});toast('PDF descargado')}
+    catch(err){if(!(err&&err.code==='declined'))toast(err&&err.code?'No se pudo descargar el PDF.':'No se pudo generar el PDF. Revisa tu conexión.')}
+    finally{b.disabled=false;b.textContent=t}
   }
   if(b.dataset.anular){
     if(!anularArmed){anularArmed=true;b.textContent='¿Anular? Toca otra vez';setTimeout(()=>{anularArmed=false},4000);return}

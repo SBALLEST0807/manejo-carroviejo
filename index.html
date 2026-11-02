@@ -641,11 +641,11 @@ async function showFactura(f,nueva){
   const keep=invCur&&invCur.view&&invCur.view.id===f.id?invCur:null;
   invCur={view:f,pdfP:keep?keep.pdfP:null,nueva:nueva||(keep&&keep.nueva)};nueva=invCur.nueva;
   $('#invTitle').textContent=(f.tipoDoc||'Factura')+' '+numFact(f);
-  $('#invBody').innerHTML=`${nueva&&f.estado!=='Anulada'?`<div class="sendbar"><div><b>Factura guardada.</b> Envíasela a ${esc(f.cliente)}${f.clienteMail?` (${esc(f.clienteMail)})`:''} con un saludo listo.</div><button type="button" class="primary" data-enviar="1">Enviar por correo</button></div>`:''}<div class="paper">${invoiceHTML(f)}</div>`;
+  $('#invBody').innerHTML=`${nueva&&f.estado!=='Anulada'?`<div class="sendbar"><div><b>Factura guardada.</b> Envíasela a ${esc(f.cliente)}${f.clienteMail?` (${esc(f.clienteMail)})`:''}: se abre tu Gmail con el mensaje listo y se descarga el PDF para adjuntarlo.</div><span style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" data-gmail="1">Enviar por Gmail</button><button type="button" data-enviar="1">Otras apps</button></span></div>`:''}<div class="paper">${invoiceHTML(f)}</div>`;
   if(f.estado!=='Anulada'&&!invCur.pdfP){invCur.pdfP=pdfBlob(f).catch(()=>null)}
   if(dlCap===undefined){try{dlCap=window.claude&&window.claude.use?await window.claude.use('downloads'):null}catch(e){dlCap=null}}
   const inClaude=mode==='db';
-  $('#invFoot').innerHTML=`${f.estado!=='Anulada'?`<button type="button" class="danger left" data-anular="1">Anular</button>`:''}${f.estado!=='Anulada'?`<button type="button" data-enviar="1">Enviar por correo</button>`:''}${f.estado==='Pendiente'?`<button type="button" data-estado="Pagada">Marcar pagada</button>`:f.estado==='Pagada'?`<button type="button" data-estado="Pendiente">Volver a pendiente</button>`:''}<button type="button" data-cerrar="1">Cerrar</button>${!inClaude?`<button type="button" data-imprimir="1">Imprimir</button>`:''}${f.pdfUrl?`<a class="btn" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">Abrir PDF</a>`:inClaude?`<button type="button" data-archivar="1">Guardar PDF en archivo</button>`:''}${dlCap?`<button type="button" class="primary" data-descargar="1">Descargar PDF</button>`:''}`;
+  $('#invFoot').innerHTML=`${f.estado!=='Anulada'?`<button type="button" class="danger left" data-anular="1">Anular</button>`:''}${f.estado!=='Anulada'?`<button type="button" data-gmail="1">Enviar por Gmail</button><button type="button" data-enviar="1">Otras apps</button>`:''}${f.estado==='Pendiente'?`<button type="button" data-estado="Pagada">Marcar pagada</button>`:f.estado==='Pagada'?`<button type="button" data-estado="Pendiente">Volver a pendiente</button>`:''}<button type="button" data-cerrar="1">Cerrar</button>${!inClaude?`<button type="button" data-imprimir="1">Imprimir</button>`:''}${f.pdfUrl?`<a class="btn" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">Abrir PDF</a>`:inClaude?`<button type="button" data-archivar="1">Guardar PDF en archivo</button>`:''}${dlCap?`<button type="button" class="primary" data-descargar="1">Descargar PDF</button>`:''}`;
   if(!invDlg.open)invDlg.showModal();
 }
 /* ---------- Enviar factura por correo ---------- */
@@ -678,7 +678,18 @@ async function enviarFactura(btn){
     abrirCorreo(m);toast(file?'Se abrió tu correo: adjunta el PDF que se descargó':'Se abrió tu correo con el mensaje listo');
   }finally{btn.disabled=false;btn.textContent=t}
 }
-$('#inv').addEventListener('click',e=>{const b=e.target.closest('[data-enviar]');if(b&&invCur?.view)enviarFactura(b)});
+// Gmail: abre el correo nuevo con destinatario, asunto y saludo; descarga el PDF para adjuntarlo
+async function enviarGmail(btn){
+  const f=invCur.view;const m=correoFactura(f);
+  const a=document.createElement('a');a.href='https://mail.google.com/mail/?view=cm&fs=1'+(m.para?'&to='+encodeURIComponent(m.para):'')+'&su='+encodeURIComponent(m.asunto)+'&body='+encodeURIComponent(m.cuerpo);
+  a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();
+  if(!dlCap){toast('Se abrió Gmail. Descarga el PDF desde la pestaña Facturas y adjúntalo.');return}
+  const t=btn.textContent;btn.disabled=true;btn.textContent='Preparando PDF…';
+  try{const blob=await(invCur.pdfP||pdfBlob(f));if(!blob)throw new Error('pdf');await dlCap.save({filename:pdfName(f),data:blob});toast('Gmail abierto: arrastra el PDF descargado al correo y dale Enviar')}
+  catch(err){if(!(err&&err.code==='declined'))toast('Gmail se abrió, pero no se pudo descargar el PDF.')}
+  finally{btn.disabled=false;btn.textContent=t}
+}
+$('#inv').addEventListener('click',e=>{if(!invCur?.view)return;const g=e.target.closest('[data-gmail]');if(g)return enviarGmail(g);const b=e.target.closest('[data-enviar]');if(b)enviarFactura(b)});
 let anularArmed=false;
 $('#invFoot').addEventListener('click',async e=>{
   const b=e.target.closest('button');if(!b)return;

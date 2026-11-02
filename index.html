@@ -302,7 +302,11 @@ function vResumen(){
   S.vehiculos.forEach(v=>{[['soat','SOAT'],['tecno','Técnico-mecánica']].forEach(([k,l])=>{const n=days(v[k]);if(n!==null&&n<=30)alerts.push({n,html:`${placa(v)}<div><b>${l}</b> <span class="muted">· ${fdate(v[k])}</span></div>${venc(v[k])}`})})});
   S.conductores.forEach(c=>{const n=days(c.licencia);if(n!==null&&n<=30)alerts.push({n,html:`<div><b>Licencia de ${esc(c.nombre)}</b> <span class="muted">· ${fdate(c.licencia)}</span></div>${venc(c.licencia)}`})});
   alerts.sort((a,b)=>a.n-b.n);
-  const per=S.vehiculos.map(v=>({v,i:vj.filter(x=>x.vehiculo===v.id).reduce((a,x)=>a+num(x.valor),0),g:gs.filter(x=>x.vehiculo===v.id).reduce((a,x)=>a+num(x.valor),0)})).filter(r=>r.i||r.g);
+  const factVeh=f=>f.vehiculo||(S.vehiculos.length===1?S.vehiculos[0].id:'');
+  const sueltas=f=>(f.items||[]).filter(i=>!i.viajeId).reduce((b,i)=>b+num(i.valor),0);
+  const per=S.vehiculos.map(v=>({v,i:vj.filter(x=>x.vehiculo===v.id).reduce((a,x)=>a+num(x.valor),0)+fm.filter(f=>factVeh(f)===v.id).reduce((a,f)=>a+sueltas(f),0),g:gs.filter(x=>x.vehiculo===v.id).reduce((a,x)=>a+num(x.valor),0)})).filter(r=>r.i||r.g);
+  const sinVeh=fm.filter(f=>!factVeh(f)||!veh(factVeh(f))).reduce((a,f)=>a+sueltas(f),0);
+  if(sinVeh)per.push({v:null,i:sinVeh,g:0});
   const mx=Math.max(1,...per.map(r=>Math.max(r.i,r.g)));
   const prox=S.viajes.filter(x=>x.fecha>=TODAY&&(x.estado==='Programado'||x.estado==='En curso')).sort((a,b)=>a.fecha<b.fecha?-1:1).slice(0,6);
   const mesLbl=new Date(m+'-01T00:00:00').toLocaleDateString('es-CO',{month:'long',year:'numeric'});
@@ -320,7 +324,7 @@ function vResumen(){
   </div>
   <div class="cols">
    <section class="panel"><h2>Documentos por vencer</h2>${alerts.length?`<ul class="alerts">${alerts.map(a=>`<li class="${a.n<0?'bad':''}">${a.html}</li>`).join('')}</ul>`:`<div class="empty"><b>${isLoading()?'Cargando…':'Todo al día'}</b>${isLoading()?'':'Ningún SOAT, técnico-mecánica o licencia vence en los próximos 30 días.'}</div>`}</section>
-   <section class="panel"><h2>Ingresos y gastos por vehículo</h2>${per.length?`<div class="legend"><span><i style="background:var(--ok)"></i>Ingresos</span><span><i style="background:var(--bad);opacity:.75"></i>Gastos</span></div><div class="bars">${per.map(r=>`<div class="brow">${placa(r.v)}<div class="btrack"><div class="b in" style="width:${r.i/mx*100}%"></div><div class="bnum">${cop.format(r.i)}</div><div class="b out" style="width:${r.g/mx*100}%"></div><div class="bnum">${cop.format(r.g)}</div></div></div>`).join('')}</div>`:`<div class="empty"><b>${isLoading()?'Cargando…':'Sin movimientos este mes'}</b>${isLoading()?'':'Registra viajes y gastos para ver la comparación.'}</div>`}</section>
+   <section class="panel"><h2>Ingresos y gastos por vehículo</h2>${per.length?`<div class="legend"><span><i style="background:var(--ok)"></i>Ingresos</span><span><i style="background:var(--bad);opacity:.75"></i>Gastos</span></div><div class="bars">${per.map(r=>`<div class="brow">${r.v?placa(r.v):'<span class="muted" style="font-size:13px">Sin vehículo</span>'}<div class="btrack"><div class="b in" style="width:${r.i/mx*100}%"></div><div class="bnum">${cop.format(r.i)}</div><div class="b out" style="width:${r.g/mx*100}%"></div><div class="bnum">${cop.format(r.g)}</div></div></div>`).join('')}</div>`:`<div class="empty"><b>${isLoading()?'Cargando…':'Sin movimientos este mes'}</b>${isLoading()?'':'Registra viajes y gastos para ver la comparación.'}</div>`}</section>
   </div>
   <h2 style="margin-top:28px">Próximos viajes</h2>
   <div class="tbl"><table><thead><tr><th>Fecha</th><th>Vehículo</th><th>Conductor</th><th>Ruta</th><th>Estado</th></tr></thead><tbody>
@@ -535,7 +539,8 @@ function openFacturar(ids,cliId){
   if(!items.length)items.push({desc:'',cant:1,unit:0,valor:0});
   const e=empresa();
   const c=cliId?S.clientes.find(x=>x.id===cliId):cliByName(vs[0]?.cliente);
-  invCur={draft:{numero:nextNum(),prefijo:e.prefijo||'',tipoDoc:e.tipoDoc||'Factura de venta',fecha:TODAY,cliente:c?c.nombre:(vs[0]?.cliente||''),clienteRef:c?c.id:'',clienteId:c?.documento||'',clienteDir:[c?.direccion,c?.ciudad].filter(Boolean).join(', '),clienteTel:c?.telefono||'',clienteMail:c?.correo||'',notas:'',items,total:0,retTipo:e.retDef||'Ninguna',retPct:0,retVal:0,estado:'Pendiente'}};
+  const vehDef=vs[0]?.vehiculo||(S.vehiculos.length===1?S.vehiculos[0].id:'');
+  invCur={draft:{vehiculo:vehDef,numero:nextNum(),prefijo:e.prefijo||'',tipoDoc:e.tipoDoc||'Factura de venta',fecha:TODAY,cliente:c?c.nombre:(vs[0]?.cliente||''),clienteRef:c?c.id:'',clienteId:c?.documento||'',clienteDir:[c?.direccion,c?.ciudad].filter(Boolean).join(', '),clienteTel:c?.telefono||'',clienteMail:c?.correo||'',notas:'',items,total:0,retTipo:e.retDef||'Ninguna',retPct:0,retVal:0,estado:'Pendiente'}};
   $('#invTitle').textContent=vs.length?'Facturar '+vs.length+' viaje'+(vs.length>1?'s':''):'Nueva factura';
   const d=invCur.draft;
   $('#invBody').innerHTML=`<div class="igrid">
@@ -546,6 +551,7 @@ function openFacturar(ids,cliId){
    <label for="i_clienteMail">Correo del cliente<input id="i_clienteMail" type="email" inputmode="email" value="${esc(d.clienteMail)}" placeholder="para enviarle la factura"></label>
    <label for="i_fecha">Fecha<input id="i_fecha" type="date" value="${d.fecha}"></label>
    <label for="i_numero">Número<input id="i_numero" type="number" min="1" value="${d.numero}"></label>
+   <label for="i_vehiculo">Vehículo<select id="i_vehiculo"><option value="">Sin vehículo</option>${S.vehiculos.map(v=>`<option value="${esc(v.id)}"${v.id===d.vehiculo?' selected':''}>${esc(v.placa)}</option>`).join('')}</select></label>
    <label for="i_retTipo">Retención en la fuente<select id="i_retTipo">${Object.keys(RET).map(k=>`<option${k===d.retTipo?' selected':''}>${k}</option>`).join('')}</select></label>
    <label for="i_notas" style="grid-column:span 2">Nota (opcional)<input id="i_notas" placeholder="Ej.: pago a 15 días"></label></div>
    <div><h2 style="margin:4px 0 8px">Detalle de la factura</h2><div id="iLines"></div>
@@ -569,7 +575,7 @@ function readDraft(){
   d.total=d.items.reduce((a,i)=>a+num(i.valor),0);if($('#i_retTipo'))d.retTipo=$('#i_retTipo').value;
   {const r=calcRet(d.retTipo,d.total,empresa().uvt);d.retPct=r.pct;d.retVal=r.val;
   if($('#iTotal'))$('#iTotal').innerHTML=`<b>Total ${cop.format(d.total)}</b>`+(r.pct?(r.aplica?`<br>Retención ${String(r.pct).replace('.',',')}%: −${cop.format(r.val)}<br><b>Recibes ${cop.format(d.total-r.val)}</b>`:`<br><span class="muted">Sin retención: el total no llega a ${cop.format(r.base)}</span>`):'')}
-  const c=cliByName(d.cliente);d.clienteRef=c?c.id:'';
+  const c=cliByName(d.cliente);d.clienteRef=c?c.id:'';if($('#i_vehiculo'))d.vehiculo=$('#i_vehiculo').value;
   d.numero=num($('#i_numero').value)||d.numero;return d}
 // Al elegir un cliente registrado, llena sus datos
 $('#invBody').addEventListener('change',e=>{

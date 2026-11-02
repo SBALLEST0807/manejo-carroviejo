@@ -386,7 +386,7 @@ function vFacturas(){
   <button data-empresa="1">Datos de la empresa</button><button data-gotoviajes="1">Facturar viajes</button><button class="primary" data-nuevafact="1">+ Nueva factura</button></div>
   ${e.nit?'':`<div class="note">Completa los <b>datos de la empresa</b> (NIT, celular, cuenta para pagos) para que salgan en tus facturas.</div>`}
   <div class="tbl"><table><thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th class="num">Viajes</th><th class="num">Total</th><th>Estado</th><th>PDF</th><th></th></tr></thead><tbody>
-  ${rows.length?rows.map(f=>`<tr><td class="factno">${esc(numFact(f))}</td><td>${fdate(f.fecha)}</td><td>${esc(f.cliente)}${f.clienteId?` <span class="muted">· ${esc(f.clienteId)}</span>`:''}</td><td class="num">${(f.items||[]).length}</td><td class="num">${cop.format(num(f.total))}${num(f.retVal)?`<br><span class="muted" style="font-size:12px">Recibes ${cop.format(neto(f))}</span>`:''}</td><td>${pill(f.estado)}</td><td>${f.pdfUrl?`<a class="pdflink" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">${esc(pdfName(f))}</a> <button class="link" data-genpdf="${f.id}" title="Volver a generar el PDF">Rehacer</button>`:`<button class="link" data-genpdf="${f.id}">Guardar PDF</button>`}</td><td class="act"><button class="link" data-verfact="${f.id}">Ver</button>${f.estado==='Pendiente'?`<button class="link" data-pagar="${f.id}">Marcar pagada</button>`:''}${f.estado==='Pagada'?`<button class="link" data-despagar="${f.id}">Volver a pendiente</button>`:''}</td></tr>`).join(''):emptyRow(8,'Aún no hay facturas','En la pestaña Viajes marca uno o varios viajes y pulsa “Facturar”.')}
+  ${rows.length?rows.map(f=>`<tr><td class="factno">${esc(numFact(f))}</td><td>${fdate(f.fecha)}</td><td>${esc(f.cliente)}${f.clienteId?` <span class="muted">· ${esc(f.clienteId)}</span>`:''}</td><td class="num">${(f.items||[]).length}</td><td class="num">${cop.format(num(f.total))}${num(f.retVal)?`<br><span class="muted" style="font-size:12px">Recibes ${cop.format(neto(f))}</span>`:''}</td><td>${pill(f.estado)}</td><td>${f.pdfUrl?`<a class="pdflink" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">${esc(pdfName(f))}</a> <button class="link" data-genpdf="${f.id}" title="Volver a generar el PDF">Rehacer</button>`:`<button class="link" data-genpdf="${f.id}">${mode==='db'?'Guardar PDF':'Descargar PDF'}</button>`}</td><td class="act"><button class="link" data-verfact="${f.id}">Ver</button>${f.estado==='Pendiente'?`<button class="link" data-pagar="${f.id}">Marcar pagada</button>`:''}${f.estado==='Pagada'?`<button class="link" data-despagar="${f.id}">Volver a pendiente</button>`:''}</td></tr>`).join(''):emptyRow(8,'Aún no hay facturas','En la pestaña Viajes marca uno o varios viajes y pulsa “Facturar”.')}
   </tbody></table></div>`;
 }
 function vClientes(){
@@ -430,7 +430,7 @@ $('#main').addEventListener('click',e=>{
   if(b.dataset.gotoviajes)location.hash='viajes';
   if(b.dataset.nuevafact)openFacturar([],null);
   if(b.dataset.factcli)openFacturar([],b.dataset.factcli);
-  if(b.dataset.genpdf){const f=S.facturas.find(x=>x.id===b.dataset.genpdf);if(f){b.disabled=true;b.textContent='Generando…';archivarPdf(f).then(ok=>{if(!ok){b.disabled=false;b.textContent=f.pdfUrl?'Rehacer':'Guardar PDF'}})}}
+  if(b.dataset.genpdf){const f=S.facturas.find(x=>x.id===b.dataset.genpdf);if(f){b.disabled=true;b.textContent='Generando…';archivarPdf(f).then(()=>{b.disabled=false;b.textContent=f.pdfUrl?'Rehacer':(mode==='db'?'Guardar PDF':'Descargar PDF')})}}
   if(b.dataset.despagar)setEstado(b.dataset.despagar,'Pendiente');
   if(b.dataset.pagar)setEstado(b.dataset.pagar,'Pagada');
 });
@@ -657,7 +657,8 @@ async function archivarPdf(f){
   let blob;
   try{blob=await makePdf(f)}catch(e){toast('No se pudo generar el PDF. Revisa tu conexión.');return false}
   const as=await getAssets();
-  if(!as||mode!=='db'){toast('PDF generado. Para guardarlo en el archivo abre la app desde tu cuenta de Claude.');return false}
+  if(mode!=='db'){try{await localDl.save({filename:pdfName(f),data:blob});toast('PDF '+pdfName(f)+' descargado');return true}catch(e){toast('No se pudo descargar el PDF.');return false}}
+  if(!as){toast('PDF generado. Para guardarlo en el archivo abre la app desde tu cuenta de Claude.');return false}
   try{
     const r=await as.upload(new File([blob],pdfName(f),{type:'application/pdf'}));
     const cur=S.facturas.find(x=>x.id===f.id)||f;const{id,...d}=cur;
@@ -672,6 +673,8 @@ async function setEstado(id,est){const f=S.facturas.find(x=>x.id===id);if(!f)ret
   try{await save('facturas',fid,{...d,estado:est});toast(est==='Pagada'?'Factura marcada como pagada':'Factura devuelta a pendiente');if(invDlg.open&&invCur?.view?.id===fid)showFactura({...d,estado:est,id:fid})}catch(err){toast(errMsg(err))}}
 function verFactura(id){const f=S.facturas.find(x=>x.id===id);if(f)showFactura(f)}
 let dlCap;
+// Fuera de Claude (por ejemplo en Vercel) el navegador descarga el archivo directamente.
+const localDl={save:async({filename,data})=>{const u=URL.createObjectURL(data instanceof Blob?data:new Blob([data],{type:'application/pdf'}));const a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);return{status:'saved'}}};
 async function showFactura(f,nueva){
   const keep=invCur&&invCur.view&&invCur.view.id===f.id?invCur:null;
   invCur={view:f,pdfP:keep?keep.pdfP:null,nueva:nueva||(keep&&keep.nueva)};nueva=invCur.nueva;
@@ -679,6 +682,7 @@ async function showFactura(f,nueva){
   $('#invBody').innerHTML=`${nueva&&f.estado!=='Anulada'?`<div class="sendbar"><div><b>Factura guardada.</b> Envíasela a ${esc(f.cliente)}${f.clienteMail?` (${esc(f.clienteMail)})`:''}: se abre tu Gmail con el mensaje listo y se descarga el PDF para adjuntarlo.</div><span style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" data-gmail="1">Enviar por Gmail</button><button type="button" data-enviar="1">Otras apps</button></span></div>`:''}<div class="paper">${invoiceHTML(f)}</div>`;
   if(f.estado!=='Anulada'&&!invCur.pdfP){invCur.pdfP=pdfBlob(f).catch(()=>null)}
   if(dlCap===undefined){try{dlCap=window.claude&&window.claude.use?await window.claude.use('downloads'):null}catch(e){dlCap=null}}
+  if(!dlCap&&mode!=='db')dlCap=localDl;
   const inClaude=mode==='db';
   $('#invFoot').innerHTML=`${f.estado!=='Anulada'?`<button type="button" class="danger left" data-anular="1">Anular</button>`:''}${f.estado!=='Anulada'?`<button type="button" data-gmail="1">Enviar por Gmail</button><button type="button" data-enviar="1">Otras apps</button>`:''}${f.estado==='Pendiente'?`<button type="button" data-estado="Pagada">Marcar pagada</button>`:f.estado==='Pagada'?`<button type="button" data-estado="Pendiente">Volver a pendiente</button>`:''}<button type="button" data-cerrar="1">Cerrar</button>${!inClaude?`<button type="button" data-imprimir="1">Imprimir</button>`:''}${f.pdfUrl?`<a class="btn" href="${esc(f.pdfUrl)}" target="_blank" rel="noopener">Abrir PDF</a>`:inClaude?`<button type="button" data-archivar="1">Guardar PDF en archivo</button>`:''}${dlCap?`<button type="button" class="primary" data-descargar="1">Descargar PDF</button>`:''}`;
   if(!invDlg.open)invDlg.showModal();

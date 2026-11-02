@@ -139,6 +139,7 @@ dialog.wide{width:min(860px,calc(100vw - 32px))}
 .inv td{height:27px;padding:3px 8px;border-bottom:1px solid var(--g);border-left:1.5px solid var(--g);color:#16181b;font-family:"Source Sans 3",Arial,sans-serif;font-size:13px;vertical-align:middle}
 .inv th:first-child,.inv td:first-child{border-left:0}
 .inv tr:last-child td{border-bottom:0}
+.inv td.det{white-space:pre-line;height:auto;min-height:27px;line-height:1.3;padding:5px 8px}
 .inv td.c{text-align:center}.inv td.r{text-align:right;font-variant-numeric:tabular-nums}
 .inv .pie{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
 .inv .leg{border:1.5px solid var(--g);border-radius:8px;padding:6px 12px;font-family:Arial,sans-serif;font-size:11px;text-align:center;display:flex;flex-direction:column;justify-content:space-between;gap:16px}
@@ -222,7 +223,7 @@ const SCHEMA={
     {k:'vehiculo',l:'Vehículo',t:'select',opts:vehOpts,req:1},{k:'conductor',l:'Conductor',t:'select',opts:condOpts,blank:'—'},
     {k:'origen',l:'Origen',req:1},{k:'destino',l:'Destino',req:1},
     {k:'cliente',l:'Cliente / pasajero'},{k:'km',l:'Km recorridos',t:'number'},
-    {k:'valor',l:'Valor cobrado (COP)',t:'number',full:1},{k:'notas',l:'Notas',t:'textarea',full:1}]},
+    {k:'valor',l:'Valor cobrado (COP)',t:'number',full:1},{k:'notas',l:'Detalle (sale en la factura)',t:'textarea',full:1}]},
   gastos:{one:'gasto',fields:[
     {k:'fecha',l:'Fecha',t:'date',req:1,def:()=>TODAY},{k:'tipo',l:'Tipo',t:'select',o:['Combustible','Mantenimiento','Peaje','Parqueadero','Lavado','Llantas','Seguro','Otro']},
     {k:'vehiculo',l:'Vehículo',t:'select',opts:vehOpts,req:1},{k:'valor',l:'Valor (COP)',t:'number',req:1},
@@ -462,7 +463,7 @@ function invoiceHTML(f){
   const e={...EMP_DEF,...(f.empresa||empresa())};
   const [y,m,d]=(f.fecha||'').split('-');
   const items=f.items||[];
-  const filas=items.map(i=>`<tr><td class="c">1</td><td>${esc(i.desc)}${i.fecha?` · ${esc(fdate(i.fecha))}`:''}${i.placa?` · Placa ${esc(i.placa)}`:''}</td><td class="r">${cop.format(num(i.valor))}</td><td class="r">${cop.format(num(i.valor))}</td></tr>`);
+  const filas=items.map(i=>`<tr><td class="c">1</td><td class="det">${esc(i.desc)}</td><td class="r">${cop.format(num(i.valor))}</td><td class="r">${cop.format(num(i.valor))}</td></tr>`);
   for(let k=items.length;k<14;k++)filas.push('<tr><td></td><td></td><td></td><td></td></tr>');
   const nom=String(e.nombre||'Transporte Carro Viejo').replace(/^transporte\s+/i,'');
   return`<div class="inv${f.estado==='Anulada'?' anul':''}">
@@ -489,7 +490,7 @@ const invDlg=$('#inv');let invCur=null;
 function openFacturar(ids){
   const vs=ids.map(id=>S.viajes.find(v=>v.id===id)).filter(v=>v&&!factOf(v)&&v.estado!=='Cancelado').sort((a,b)=>a.fecha<b.fecha?-1:1);
   if(!vs.length){toast('Esos viajes ya están facturados.');return}
-  const items=vs.map(v=>{const vh=veh(v.vehiculo);return{viajeId:v.id,fecha:v.fecha,desc:`Servicio de transporte ${v.origen||''} → ${v.destino||''}`.trim(),placa:vh?vh.placa:'',km:v.km||null,valor:num(v.valor)}});
+  const items=vs.map(v=>{const vh=veh(v.vehiculo);return{viajeId:v.id,fecha:v.fecha,desc:[[`Servicio de transporte ${v.origen||''} → ${v.destino||''}`,fdate(v.fecha),vh&&vh.placa?'Placa '+vh.placa:''].filter(Boolean).join(' · '),String(v.notas||'').trim()].filter(Boolean).join('\n'),placa:vh?vh.placa:'',km:v.km||null,valor:num(v.valor)}});
   const e=empresa();
   invCur={draft:{numero:nextNum(),prefijo:e.prefijo||'',tipoDoc:e.tipoDoc||'Cuenta de cobro',fecha:TODAY,cliente:vs[0].cliente||'',clienteId:'',clienteDir:'',clienteTel:'',notas:'',items,total:items.reduce((a,i)=>a+i.valor,0),estado:'Pendiente'}};
   $('#invTitle').textContent='Facturar '+vs.length+' viaje'+(vs.length>1?'s':'');
@@ -501,12 +502,13 @@ function openFacturar(ids){
    <label for="i_clienteDir">Dirección<input id="i_clienteDir"></label>
    <label for="i_fecha">Fecha<input id="i_fecha" type="date" value="${d.fecha}"></label>
    <label for="i_numero">Número<input id="i_numero" type="number" min="1" value="${d.numero}"></label>
-   <label for="i_notas" style="grid-column:1/-1">Nota (opcional)<input id="i_notas" placeholder="Ej.: pago a 15 días"></label></div>
+   <label for="i_notas" style="grid-column:1/-1">Nota (opcional)<input id="i_notas" placeholder="Ej.: pago a 15 días"></label>
+   ${d.items.map((it,k)=>`<label for="i_desc_${k}" style="grid-column:1/-1">Detalle ${d.items.length>1?'del viaje '+(k+1):''} (así sale en la factura)<textarea id="i_desc_${k}" rows="3">${esc(it.desc)}</textarea></label>`).join('')}</div>
    <div class="paper" id="invPrev"></div>`;
   $('#invFoot').innerHTML=`<button type="button" class="left" data-empresa2="1">Datos de la empresa</button><button type="button" data-cerrar="1">Cancelar</button><button type="submit" class="primary">Guardar factura</button>`;
   prev();invDlg.showModal();
 }
-function readDraft(){const d=invCur.draft;['cliente','clienteId','clienteTel','clienteDir','fecha','notas'].forEach(k=>d[k]=$('#i_'+k).value.trim());d.numero=num($('#i_numero').value)||d.numero;return d}
+function readDraft(){const d=invCur.draft;['cliente','clienteId','clienteTel','clienteDir','fecha','notas'].forEach(k=>d[k]=$('#i_'+k).value.trim());d.items.forEach((it,k)=>{const t=$('#i_desc_'+k);if(t)it.desc=t.value.trim()});d.numero=num($('#i_numero').value)||d.numero;return d}
 function prev(){if(invCur&&invCur.draft&&$('#invPrev'))$('#invPrev').innerHTML=invoiceHTML({...readDraft(),empresa:empresa()})}
 $('#invBody').addEventListener('input',prev);
 $('#invFrm').addEventListener('submit',async e=>{
